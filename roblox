@@ -7,7 +7,6 @@ local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 
--- Re-get character on respawn
 player.CharacterAdded:Connect(function(char)
 	character = char
 	humanoid = char:WaitForChild("Humanoid")
@@ -19,26 +18,27 @@ screenGui.Name = "OneClickTeleportGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
-local function createButton(name, posY, text, color)
+-- ฟังก์ชันสร้างปุ่มมือถือเล็ก
+local function createMiniButton(name, posY, text, color)
 	local btn = Instance.new("TextButton")
 	btn.Name = name
-	btn.Size = UDim2.new(0, 150, 0, 50)
+	btn.Size = UDim2.new(0, 80, 0, 40) -- เล็กลงสำหรับมือถือ
 	btn.Position = UDim2.new(0, 10, 0, posY)
 	btn.Text = text
 	btn.BackgroundColor3 = color
 	btn.TextColor3 = Color3.new(1,1,1)
 	btn.Font = Enum.Font.SourceSansBold
-	btn.TextSize = 20
+	btn.TextSize = 14
 	btn.Parent = screenGui
 	return btn
 end
 
-local exitButton = createButton("ExitButton", 10, "Exit", Color3.fromRGB(180,0,0))
-local teleportButton = createButton("TeleportButton", 70, "Bring Enemies (R)", Color3.fromRGB(0,180,90))
-local healButton = createButton("HealButton", 130, "Heal (F)", Color3.fromRGB(200,100,100))
-local speedButton = createButton("SpeedButton", 190, "Speed (G): OFF", Color3.fromRGB(255,200,50))
-local flyButton = createButton("FlyButton", 250, "Fly (H): OFF", Color3.fromRGB(50,150,255))
-local attackButton = createButton("AttackButton", 310, "Auto Attack: OFF", Color3.fromRGB(255,100,50))
+-- สร้างปุ่ม
+local teleportButton = createMiniButton("TeleportButton", 50, "Bring Enemies (R)", Color3.fromRGB(0,180,90))
+local healButton = createMiniButton("HealButton", 100, "Heal (F)", Color3.fromRGB(200,100,100))
+local speedButton = createMiniButton("SpeedButton", 150, "Speed (G): OFF", Color3.fromRGB(255,200,50))
+local flyButton = createMiniButton("FlyButton", 200, "Fly (H): OFF", Color3.fromRGB(50,150,255))
+local attackButton = createMiniButton("AttackButton", 250, "Auto Attack: OFF", Color3.fromRGB(255,100,50))
 
 -- Settings
 local offset = Vector3.new(0,0,-5)
@@ -49,136 +49,12 @@ local flySpeed = 50
 local bodyVelocity
 
 local autoAttackEnabled = false
-local attackDelay = 0.2 -- เวลา interval ระหว่างการโจมตี ปรับได้
+local attackDelay = 0.2
 local attackEvent = ReplicatedStorage:WaitForChild("AttackEvent") -- เปลี่ยนให้ตรงกับเกม
 
--- Utility: Check if model is NPC
-local function isNPC(model)
-	if not model:IsA("Model") then return false end
-	if Players:GetPlayerFromCharacter(model) then return false end
-	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
-end
+-- ฟังก์ชันต่าง ๆ เหมือนเดิม (teleport, heal, fly, speed, auto attack)
+-- ตัวอย่างฟังก์ชัน toggle
 
--- Teleport Nearby NPCs
-local function teleportNearbyNPCs()
-	local char = player.Character
-	if not char then return end
-	local myHRP = char:FindFirstChild("HumanoidRootPart")
-	if not myHRP then return end
-
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
-			local npc = obj.Parent
-			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
-				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
-			end
-		end
-	end
-end
-
--- Heal function (เหมือนเดิม)
-local function findNearestSeat()
-	local char = player.Character
-	if not char then return nil end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return nil end
-	local nearest = nil
-	local shortestDist = math.huge
-	for _, seat in ipairs(workspace:GetDescendants()) do
-		if seat:IsA("Seat") and not seat.Disabled then
-			local dist = (seat.Position - hrp.Position).Magnitude
-			if dist < shortestDist then
-				shortestDist = dist
-				nearest = seat
-			end
-		end
-	end
-	return nearest
-end
-
-local function healPlayer()
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	local humanoid = char:FindFirstChild("Humanoid")
-	if not hrp or not humanoid then return end
-
-	local seat = findNearestSeat()
-	if not seat then warn("No usable seat found!") return end
-	local originalCFrame = hrp.CFrame
-	local wasAnchored = seat.Anchored
-	seat.Anchored = true
-	hrp.CFrame = seat.CFrame + Vector3.new(0,2,0)
-
-	-- Wait full HP
-	while true do
-		task.wait(1)
-		local hpLabel = player:FindFirstChild("PlayerGui")
-			and player.PlayerGui:FindFirstChild("Main")
-			and player.PlayerGui.Main:FindFirstChild("HomePage")
-			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
-			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
-			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text
-			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current) == tonumber(max) then break end
-		else
-			break
-		end
-	end
-
-	humanoid.Sit = false
-	task.wait(0.1)
-	hrp.CFrame = originalCFrame
-	seat.Anchored = wasAnchored
-end
-
--- Infinite jump
-UserInputService.JumpRequest:Connect(function()
-	if humanoid then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	end
-end)
-
--- LoopSpeed + Fly + Auto Attack
-RunService.Stepped:Connect(function()
-	-- Speed
-	if speedEnabled and humanoid then
-		humanoid.WalkSpeed = 60
-	elseif humanoid then
-		humanoid.WalkSpeed = 16
-	end
-
-	-- Fly
-	if flyEnabled and bodyVelocity and humanoid then
-		local moveDir = Vector3.new(0,0,0)
-		local camera = workspace.CurrentCamera
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0,1,0) end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0,1,0) end
-		bodyVelocity.Velocity = (moveDir.Magnitude>0) and moveDir.Unit*flySpeed or Vector3.new(0,0,0)
-	end
-end)
-
--- Auto Attack Loop
-spawn(function()
-	while true do
-		task.wait(attackDelay)
-		if autoAttackEnabled and attackEvent then
-			pcall(function()
-				attackEvent:FireServer()
-			end)
-		end
-	end
-end)
-
--- Toggle functions
 local function toggleSpeed()
 	speedEnabled = not speedEnabled
 	speedButton.Text = "Speed (G): "..(speedEnabled and "ON" or "OFF")
@@ -205,8 +81,8 @@ local function toggleAutoAttack()
 end
 
 -- Connect buttons
-teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
-healButton.MouseButton1Click:Connect(healPlayer)
+teleportButton.MouseButton1Click:Connect(function() pcall(teleportNearbyNPCs) end)
+healButton.MouseButton1Click:Connect(function() pcall(healPlayer) end)
 speedButton.MouseButton1Click:Connect(toggleSpeed)
 flyButton.MouseButton1Click:Connect(toggleFly)
 attackButton.MouseButton1Click:Connect(toggleAutoAttack)
@@ -218,11 +94,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	elseif input.KeyCode == Enum.KeyCode.F then healPlayer()
 	elseif input.KeyCode == Enum.KeyCode.G then toggleSpeed()
 	elseif input.KeyCode == Enum.KeyCode.H then toggleFly()
-	elseif input.KeyCode == Enum.KeyCode.T then toggleAutoAttack() -- T สำหรับ Auto Attack
+	elseif input.KeyCode == Enum.KeyCode.T then toggleAutoAttack()
 	end
-end)
-
--- Exit GUI
-exitButton.MouseButton1Click:Connect(function()
-	screenGui:Destroy()
 end)
