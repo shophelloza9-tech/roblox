@@ -1,295 +1,241 @@
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
-local hrp = character:WaitForChild("HumanoidRootPart")
 
--- Update character on respawn
+-- Re-get character on respawn
 player.CharacterAdded:Connect(function(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    hrp = char:WaitForChild("HumanoidRootPart")
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
 end)
 
--- Settings
-local speedEnabled = false
-local damageEnabled = true
-local damageMultiplier = 5
-local healEnabled = true
-local maxDistance = 80
-local hitboxOffset = Vector3.new(0,3,0)
-local hitboxSize = Vector3.new(5,5,5)
-local autoAttackDelay = 0.3
-
--- GUI
+-- UI creation
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "UltimateFarmGUI"
+screenGui.Name = "OneClickTeleportGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
-local function createButton(name,pos,color,text)
-    local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.new(0,150,0,50)
-    btn.Position = pos
-    btn.BackgroundColor3 = color
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 18
-    btn.Text = text
-    btn.Parent = screenGui
-    return btn
-end
+-- Exit Button
+local exitButton = Instance.new("TextButton")
+exitButton.Name = "ExitButton"
+exitButton.Size = UDim2.new(0, 150, 0, 50)
+exitButton.Position = UDim2.new(0, 10, 0, 10)
+exitButton.Text = "Exit"
+exitButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+exitButton.TextColor3 = Color3.new(1, 1, 1)
+exitButton.Font = Enum.Font.SourceSansBold
+exitButton.TextSize = 20
+exitButton.Parent = screenGui
 
-local speedButton = createButton("SpeedButton", UDim2.new(0,10,0,10), Color3.fromRGB(255,200,50), "Speed (G): OFF")
-local healButton = createButton("HealButton", UDim2.new(0,10,0,70), Color3.fromRGB(200,100,100), "Heal (F): ON")
-local damageButton = createButton("DamageButton", UDim2.new(0,10,0,130), Color3.fromRGB(255,100,0), "Damage Boost: ON")
-local exitButton = createButton("ExitButton", UDim2.new(0,10,0,190), Color3.fromRGB(180,0,0), "Exit")
+-- Teleport NPCs Button
+local teleportButton = Instance.new("TextButton")
+teleportButton.Name = "TeleportButton"
+teleportButton.Size = UDim2.new(0, 150, 0, 50)
+teleportButton.Position = UDim2.new(0, 10, 0, 70)
+teleportButton.Text = "Bring Enemies (R)"
+teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
+teleportButton.TextColor3 = Color3.new(1, 1, 1)
+teleportButton.Font = Enum.Font.SourceSansBold
+teleportButton.TextSize = 20
+teleportButton.Parent = screenGui
 
--- Utility
-local function isNPC(model)
-    if not model:IsA("Model") then return false end
-    if Players:GetPlayerFromCharacter(model) then return false end
-    return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
-end
+-- Heal Button
+local healButton = Instance.new("TextButton")
+healButton.Name = "HealButton"
+healButton.Size = UDim2.new(0, 150, 0, 50)
+healButton.Position = UDim2.new(0, 10, 0, 130)
+healButton.Text = "Heal (F)"
+healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+healButton.TextColor3 = Color3.new(1, 1, 1)
+healButton.Font = Enum.Font.SourceSansBold
+healButton.TextSize = 20
+healButton.Parent = screenGui
 
-local function smoothTeleport(targetCFrame)
-    local tween = TweenService:Create(hrp, TweenInfo.new(0.2, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
-    tween:Play()
-    tween.Completed:Wait()
-end
+-- Speed Toggle Button
+local speedButton = Instance.new("TextButton")
+speedButton.Name = "SpeedButton"
+speedButton.Size = UDim2.new(0, 150, 0, 50)
+speedButton.Position = UDim2.new(0, 10, 0, 190)
+speedButton.Text = "Speed (G): OFF"
+speedButton.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
+speedButton.TextColor3 = Color3.new(0, 0, 0)
+speedButton.Font = Enum.Font.SourceSansBold
+speedButton.TextSize = 20
+speedButton.Parent = screenGui
 
-local function dealDamage(targetHumanoid, baseDamage)
-    if damageEnabled then
-        targetHumanoid:TakeDamage(baseDamage * damageMultiplier)
-    else
-        targetHumanoid:TakeDamage(baseDamage)
-    end
-end
-
--- Auto Farm Loop
-local function autoFarm()
-    while true do
-        for _, npc in ipairs(workspace:GetDescendants()) do
-            if isNPC(npc) then
-                local npcHRP = npc:FindFirstChild("HumanoidRootPart")
-                local npcHum = npc:FindFirstChild("Humanoid")
-                if npcHRP and npcHum and npcHum.Health > 0 then
-                    local dist = (npcHRP.Position - hrp.Position).Magnitude
-                    if dist <= maxDistance then
-                        -- ลอยเหนือหัว NPC
-                        local targetCFrame = npcHRP.CFrame + hitboxOffset
-                        smoothTeleport(targetCFrame)
-                        -- โจมตี
-                        dealDamage(npcHum, 10)
-                        task.wait(autoAttackDelay)
-                    end
-                end
-            end
-        end
-        task.wait(0.1)
-    end
-end
-
--- Button functions
-speedButton.MouseButton1Click:Connect(function()
-    speedEnabled = not speedEnabled
-    speedButton.Text = "Speed (G): "..(speedEnabled and "ON" or "OFF")
-end)
-
-healButton.MouseButton1Click:Connect(function()
-    if humanoid then
-        humanoid.Health = humanoid.MaxHealth
-    end
-end)
-
-damageButton.MouseButton1Click:Connect(function()
-    damageEnabled = not damageEnabled
-    damageMultiplier = damageEnabled and 5 or 1
-    damageButton.Text = "Damage Boost: "..(damageEnabled and "ON" or "OFF")
-end)
-
-exitButton.MouseButton1Click:Connect(function()
-    screenGui:Destroy()
-end)
-
--- Hotkeys
-local UserInputService = game:GetService("UserInputService")
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.G then speedButton:Activate()
-    elseif input.KeyCode == Enum.KeyCode.F then healButton:Activate()
-    elseif input.KeyCode == Enum.KeyCode.H then damageButton:Activate()
-    end
-end)
-
--- Main Loop
-RunService.Stepped:Connect(function()
-    if speedEnabled then humanoid.WalkSpeed = 60 else humanoid.WalkSpeed = 16 end
-end)
-
--- Start auto farm
-task.spawn(autoFarm)
-
-คุณ, 15:11
--- Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- Player
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local hrp = character:WaitForChild("HumanoidRootPart")
-local camera = Workspace.CurrentCamera
-
-player.CharacterAdded:Connect(function(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    hrp = char:WaitForChild("HumanoidRootPart")
-end)
+-- God Mode Button
+local godButton = Instance.new("TextButton")
+godButton.Name = "GodModeButton"
+godButton.Size = UDim2.new(0, 150, 0, 50)
+godButton.Position = UDim2.new(0, 10, 0, 250)
+godButton.Text = "God Mode: OFF"
+godButton.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+godButton.TextColor3 = Color3.new(0, 0, 0)
+godButton.Font = Enum.Font.SourceSansBold
+godButton.TextSize = 20
+godButton.Parent = screenGui
 
 -- Settings
-local speedEnabled = false
-local healEnabled = true
+local offset = Vector3.new(0, 0, -5)
 local maxDistance = 80
-local hitboxOffset = Vector3.new(0,3,0)
-local autoAttackDelay = {0.15,0.3}
-local tweenTime = 0.12
-local healThreshold = 0.5
-local dodgeRange = 2
+local speedEnabled = false
+local godModeEnabled = false
 
--- NPC Target List (ชื่อที่ต้องการโจมตี)
-local selectableTargets = {"Goblin", "Skeleton", "Boss", "Elite"}
-
--- RemoteEvent Attack
-local attackEvent = ReplicatedStorage:FindFirstChild("AttackEvent")
-
--- GUI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "SimpleFarmGUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
-
-local function createButton(name,pos,color,text)
-    local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.new(0,150,0,50)
-    btn.Position = pos
-    btn.BackgroundColor3 = color
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 18
-    btn.Text = text
-    btn.Parent = screenGui
-    return btn
-end
-
-local speedButton = createButton("SpeedButton", UDim2.new(0,10,0,10), Color3.fromRGB(255,200,50), "Speed (G): OFF")
-local healButton = createButton("HealButton", UDim2.new(0,10,0,70), Color3.fromRGB(200,100,100), "Auto Heal: ON")
-local exitButton = createButton("ExitButton", UDim2.new(0,10,0,130), Color3.fromRGB(180,0,0), "Exit")
-
--- Utility
+-- Utility: Check if model is NPC
 local function isNPC(model)
-    if not model:IsA("Model") then return false end
-    if Players:GetPlayerFromCharacter(model) then return false end
-    if not model:FindFirstChild("Humanoid") or not model:FindFirstChild("HumanoidRootPart") then return false end
-    for _, name in ipairs(selectableTargets) do
-        if model.Name:match(name) then return true end
-    end
-    return false
+	if not model:IsA("Model") then return false end
+	if Players:GetPlayerFromCharacter(model) then return false end
+	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
 end
 
-local function smoothMove(targetCFrame)
-    local tween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
-    tween:Play()
-    tween.Completed:Wait()
+-- Teleport Nearby NPCs
+local function teleportNearbyNPCs()
+	local char = player.Character
+	if not char then return end
+
+	local myHRP = char:FindFirstChild("HumanoidRootPart")
+	if not myHRP then return end
+
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
+			local npc = obj.Parent
+			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
+				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
+			end
+		end
+	end
 end
 
-local function humanAttack(npc)
-    local npcHRP = npc:FindFirstChild("HumanoidRootPart")
-    local npcHum = npc:FindFirstChild("Humanoid")
-    if not npcHRP or not npcHum or npcHum.Health <= 0 then return end
-    if (npcHRP.Position - hrp.Position).Magnitude > maxDistance then return end
+-- Find nearest usable seat
+local function findNearestSeat()
+	local char = player.Character
+	if not char then return nil end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
 
-    -- Move above NPC with small random offset
-    local offset = hitboxOffset + Vector3.new(math.random()*0.5-0.25,0,math.random()*0.5-0.25)
-    smoothMove(npcHRP.CFrame + offset)
+	local nearest = nil
+	local shortestDist = math.huge
 
-    task.wait(autoAttackDelay[1] + math.random()*(autoAttackDelay[2]-autoAttackDelay[1]))
-
-    if attackEvent then
-        pcall(function()
-            attackEvent:FireServer(npc)
-        end)
-    end
+	for _, seat in ipairs(workspace:GetDescendants()) do
+		if seat:IsA("Seat") and not seat.Disabled then
+			local dist = (seat.Position - hrp.Position).Magnitude
+			if dist < shortestDist then
+				shortestDist = dist
+				nearest = seat
+			end
+		end
+	end
+	return nearest
 end
 
-local function autoHeal()
-    if healEnabled and humanoid.Health < humanoid.MaxHealth * healThreshold then
-        humanoid.Health = humanoid.MaxHealth
-    end
+-- Heal player by sitting
+local function healPlayer()
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local humanoid = char:FindFirstChild("Humanoid")
+	if not hrp or not humanoid then return end
+
+	local seat = findNearestSeat()
+	if not seat then
+		warn("No usable seat found!")
+		return
+	end
+
+	local originalCFrame = hrp.CFrame
+
+	local wasAnchored = seat.Anchored
+	seat.Anchored = true
+	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
+
+	while true do
+		task.wait(1)
+		local hpLabel = player:FindFirstChild("PlayerGui")
+			and player.PlayerGui:FindFirstChild("Main")
+			and player.PlayerGui.Main:FindFirstChild("HomePage")
+			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
+			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
+			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
+			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
+			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
+
+		if hpLabel and hpLabel:IsA("TextLabel") then
+			local text = hpLabel.Text
+			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
+			if current and max and tonumber(current) == tonumber(max) then
+				break
+			end
+		else
+			warn("HP label not found!")
+			break
+		end
+	end
+
+	humanoid.Sit = false
+	task.wait(0.1)
+	hrp.CFrame = originalCFrame
+	seat.Anchored = wasAnchored
 end
 
-local function autoDodge()
-    local x = (math.random()-0.5) * dodgeRange
-    local z = (math.random()-0.5) * dodgeRange
-    hrp.CFrame = hrp.CFrame + Vector3.new(x,0,z)
+-- Toggle speed
+local function toggleSpeed()
+	speedEnabled = not speedEnabled
+	speedButton.Text = "Speed (G): " .. (speedEnabled and "ON" or "OFF")
+	if not speedEnabled and humanoid then
+		humanoid.WalkSpeed = 16
+	end
 end
 
-local function randomCamera()
-    local xRot = (math.random()-0.5)*5
-    local yRot = (math.random()-0.5)*5
-    camera.CFrame = camera.CFrame * CFrame.Angles(math.rad(xRot), math.rad(yRot), 0)
+-- Toggle God Mode
+local function toggleGodMode()
+	godModeEnabled = not godModeEnabled
+	godButton.Text = "God Mode: " .. (godModeEnabled and "ON" or "OFF")
 end
 
-local function autoFarm()
-    while true do
-        for _, npc in ipairs(Workspace:GetDescendants()) do
-            if isNPC(npc) then
-                humanAttack(npc)
-            end
-        end
-        autoHeal()
-        autoDodge()
-        randomCamera()
-        task.wait(0.15)
-    end
-end
-
--- Buttons
-speedButton.MouseButton1Click:Connect(function()
-    speedEnabled = not speedEnabled
-    speedButton.Text = "Speed (G): "..(speedEnabled and "ON" or "OFF")
+-- Infinite jump
+UserInputService.JumpRequest:Connect(function()
+	if humanoid then
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
 end)
 
-healButton.MouseButton1Click:Connect(function()
-    healEnabled = not healEnabled
-    healButton.Text = "Auto Heal: "..(healEnabled and "ON" or "OFF")
+-- Loops
+RunService.Stepped:Connect(function()
+	if speedEnabled and humanoid then
+		humanoid.WalkSpeed = 60
+	end
 end)
 
-exitButton.MouseButton1Click:Connect(function()
-    screenGui:Destroy()
+-- Keep health at max if God Mode is on
+RunService.Heartbeat:Connect(function()
+	if godModeEnabled and humanoid then
+		humanoid.Health = humanoid.MaxHealth
+	end
 end)
+
+-- Connect buttons
+teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
+healButton.MouseButton1Click:Connect(healPlayer)
+speedButton.MouseButton1Click:Connect(toggleSpeed)
+godButton.MouseButton1Click:Connect(toggleGodMode)
 
 -- Hotkeys
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.G then speedButton:Activate()
-    elseif input.KeyCode == Enum.KeyCode.F then healButton:Activate()
-    end
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.R then
+		teleportNearbyNPCs()
+	elseif input.KeyCode == Enum.KeyCode.F then
+		healPlayer()
+	elseif input.KeyCode == Enum.KeyCode.G then
+		toggleSpeed()
+	elseif input.KeyCode == Enum.KeyCode.H then
+		toggleGodMode()
+	end
 end)
 
--- Speed loop
-RunService.Stepped:Connect(function()
-    humanoid.WalkSpeed = speedEnabled and 60 or 16
+-- Exit button click
+exitButton.MouseButton1Click:Connect(function()
+	screenGui:Destroy()
 end)
-
--- Start
-task.spawn(autoFarm)
