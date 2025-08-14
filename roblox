@@ -1,61 +1,102 @@
--- AutoFarm Module
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 
 player.CharacterAdded:Connect(function(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
 end)
 
-local AutoFarm = {}
-AutoFarm.Enabled = false
-AutoFarm.Range = 10
-AutoFarm.Damage = 10
+-- ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoFarmGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- ตรวจสอบ NPC
+-- Menu Toggle Button
+local menuButton = Instance.new("TextButton")
+menuButton.Size = UDim2.new(0, 100, 0, 40)
+menuButton.Position = UDim2.new(0, 10, 0, 10)
+menuButton.Text = "Auto Farm Menu"
+menuButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+menuButton.TextColor3 = Color3.new(1,1,1)
+menuButton.Font = Enum.Font.SourceSansBold
+menuButton.TextSize = 18
+menuButton.Parent = screenGui
+
+-- Menu Frame
+local menuFrame = Instance.new("Frame")
+menuFrame.Size = UDim2.new(0, 170, 0, 0)
+menuFrame.Position = UDim2.new(0, 10, 0, 60)
+menuFrame.BackgroundTransparency = 0.3
+menuFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+menuFrame.Parent = screenGui
+menuFrame.ClipsDescendants = true
+
+-- Auto Farm Button
+local autoFarmButton = Instance.new("TextButton")
+autoFarmButton.Size = UDim2.new(0, 150, 0, 50)
+autoFarmButton.Position = UDim2.new(0, 10, 0, 10)
+autoFarmButton.Text = "Auto Farm: OFF"
+autoFarmButton.BackgroundColor3 = Color3.fromRGB(180, 50, 200)
+autoFarmButton.TextColor3 = Color3.new(1,1,1)
+autoFarmButton.Font = Enum.Font.SourceSansBold
+autoFarmButton.TextSize = 20
+autoFarmButton.Parent = menuFrame
+
+-- ตัวแปร Auto Farm
+local AutoFarmEnabled = false
+local AutoFarmRange = 10
+local AutoFarmDamage = 10
+
+-- ฟังก์ชันตรวจสอบ NPC
 local function isNPC(model)
-    if not model:IsA("Model") then return false end
-    if Players:GetPlayerFromCharacter(model) then return false end
-    return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
+	if not model:IsA("Model") then return false end
+	if Players:GetPlayerFromCharacter(model) then return false end
+	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
 end
 
--- คืนค่ารายการ Humanoid ที่อยู่ในระยะ
+-- ฟังก์ชันหามอนใกล้ตัว
 local function getNearbyNPCs()
-    local npcs = {}
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return npcs end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
-            if not Players:GetPlayerFromCharacter(obj) then
-                local dist = (hrp.Position - obj.HumanoidRootPart.Position).Magnitude
-                if dist <= AutoFarm.Range then
-                    table.insert(npcs, obj.Humanoid)
-                end
-            end
-        end
-    end
-    return npcs
+	local npcs = {}
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return npcs end
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Model") and isNPC(obj) then
+			local dist = (hrp.Position - obj.HumanoidRootPart.Position).Magnitude
+			if dist <= AutoFarmRange then
+				table.insert(npcs, obj.Humanoid)
+			end
+		end
+	end
+	return npcs
 end
 
--- Loop ตี NPC ใกล้ตัว
+-- Loop Auto Farm
 RunService.Stepped:Connect(function()
-    if AutoFarm.Enabled then
-        for _, npcHumanoid in ipairs(getNearbyNPCs()) do
-            if npcHumanoid.Health > 0 then
-                npcHumanoid:TakeDamage(AutoFarm.Damage)
-            end
-        end
-    end
+	if AutoFarmEnabled then
+		for _, npcHumanoid in ipairs(getNearbyNPCs()) do
+			if npcHumanoid.Health > 0 then
+				npcHumanoid:TakeDamage(AutoFarmDamage)
+			end
+		end
+	end
 end)
 
--- Toggle AutoFarm
-function AutoFarm:Toggle()
-    self.Enabled = not self.Enabled
-    return self.Enabled
-end
+-- Menu Animation
+local menuOpen = false
+menuButton.MouseButton1Click:Connect(function()
+	menuOpen = not menuOpen
+	local totalHeight = autoFarmButton.Size.Y.Offset + 20
+	local tween = TweenService:Create(menuFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0,170,0, menuOpen and totalHeight or 0)})
+	tween:Play()
+end)
 
-return AutoFarm
+-- ปุ่มเปิด/ปิด Auto Farm
+autoFarmButton.MouseButton1Click:Connect(function()
+	AutoFarmEnabled = not AutoFarmEnabled
+	autoFarmButton.Text = "Auto Farm: " .. (AutoFarmEnabled and "ON" or "OFF")
+end)
