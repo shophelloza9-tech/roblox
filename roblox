@@ -51,7 +51,7 @@ local function isNPC(model)
 	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
 end
 
--- Advanced Teleport Nearby NPCs (เรียงวงกลม)
+-- Teleport Nearby NPCs (เรียงวงกลม ปลอดภัย)
 local function teleportNearbyNPCsAdvanced()
 	local char = player.Character
 	if not char then return end
@@ -59,13 +59,13 @@ local function teleportNearbyNPCsAdvanced()
 	if not myHRP then return end
 
 	local npcs = {}
-	for _, model in ipairs(workspace:GetChildren()) do
-		if isNPC(model) then
-			local npcHRP = model:FindFirstChild("HumanoidRootPart")
-			if npcHRP then
-				local distance = (npcHRP.Position - myHRP.Position).Magnitude
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
+			local npc = obj.Parent
+			if isNPC(npc) then
+				local distance = (obj.Position - myHRP.Position).Magnitude
 				if distance <= maxDistance then
-					table.insert(npcs, npcHRP)
+					table.insert(npcs, obj)
 				end
 			end
 		end
@@ -78,9 +78,9 @@ local function teleportNearbyNPCsAdvanced()
 	for i, npcHRP in ipairs(npcs) do
 		local angle = i * angleStep
 		local offsetPosition = Vector3.new(
-			math.cos(angle) * radius,
+			math.cos(angle) * radius + math.random(-1,1),
 			0,
-			math.sin(angle) * radius
+			math.sin(angle) * radius + math.random(-1,1)
 		)
 		npcHRP.CFrame = myHRP.CFrame + offsetPosition
 	end
@@ -127,7 +127,7 @@ local function healPlayer()
 	seat.Anchored = true
 	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
 
-	-- Heal loop with timeout (safety)
+	-- Heal loop with timeout
 	local startTime = tick()
 	repeat
 		task.wait(1)
