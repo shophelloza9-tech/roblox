@@ -17,71 +17,32 @@ screenGui.Name = "OneClickTeleportGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Exit Button
-local exitButton = Instance.new("TextButton")
-exitButton.Name = "ExitButton"
-exitButton.Size = UDim2.new(0, 150, 0, 50)
-exitButton.Position = UDim2.new(0, 10, 0, 10)
-exitButton.Text = "Exit"
-exitButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-exitButton.TextColor3 = Color3.new(1, 1, 1)
-exitButton.Font = Enum.Font.SourceSansBold
-exitButton.TextSize = 20
-exitButton.Parent = screenGui
+-- Function to create styled buttons
+local function createButton(name, position, text, bgColor)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = UDim2.new(0, 180, 0, 50)
+	btn.Position = position
+	btn.Text = text
+	btn.BackgroundColor3 = bgColor
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 20
+	btn.Parent = screenGui
+	btn.AutoButtonColor = true
+	btn.TextWrapped = true
+	return btn
+end
 
--- Teleport NPCs Button
-local teleportButton = Instance.new("TextButton")
-teleportButton.Name = "TeleportButton"
-teleportButton.Size = UDim2.new(0, 150, 0, 50)
-teleportButton.Position = UDim2.new(0, 10, 0, 70)
-teleportButton.Text = "Bring Enemies (R)"
-teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
-teleportButton.TextColor3 = Color3.new(1, 1, 1)
-teleportButton.Font = Enum.Font.SourceSansBold
-teleportButton.TextSize = 20
-teleportButton.Parent = screenGui
-
--- Heal Button
-local healButton = Instance.new("TextButton")
-healButton.Name = "HealButton"
-healButton.Size = UDim2.new(0, 150, 0, 50)
-healButton.Position = UDim2.new(0, 10, 0, 130)
-healButton.Text = "Heal (F)"
-healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
-healButton.TextColor3 = Color3.new(1, 1, 1)
-healButton.Font = Enum.Font.SourceSansBold
-healButton.TextSize = 20
-healButton.Parent = screenGui
-
--- Speed Toggle Button
-local speedButton = Instance.new("TextButton")
-speedButton.Name = "SpeedButton"
-speedButton.Size = UDim2.new(0, 150, 0, 50)
-speedButton.Position = UDim2.new(0, 10, 0, 190)
-speedButton.Text = "Speed (G): OFF"
-speedButton.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-speedButton.TextColor3 = Color3.new(0, 0, 0)
-speedButton.Font = Enum.Font.SourceSansBold
-speedButton.TextSize = 20
-speedButton.Parent = screenGui
-
--- God Mode Button
-local godButton = Instance.new("TextButton")
-godButton.Name = "GodModeButton"
-godButton.Size = UDim2.new(0, 150, 0, 50)
-godButton.Position = UDim2.new(0, 10, 0, 250)
-godButton.Text = "God Mode: OFF"
-godButton.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
-godButton.TextColor3 = Color3.new(0, 0, 0)
-godButton.Font = Enum.Font.SourceSansBold
-godButton.TextSize = 20
-godButton.Parent = screenGui
+-- Buttons
+local exitButton = createButton("ExitButton", UDim2.new(0, 10, 0, 10), "Exit", Color3.fromRGB(180, 0, 0))
+local teleportButton = createButton("TeleportButton", UDim2.new(0, 10, 0, 70), "Bring Enemies (R)", Color3.fromRGB(0, 180, 90))
+local healButton = createButton("HealButton", UDim2.new(0, 10, 0, 130), "Heal (F)", Color3.fromRGB(200, 100, 100))
+local speedButton = createButton("SpeedButton", UDim2.new(0, 10, 0, 190), "Speed (G): OFF", Color3.fromRGB(255, 200, 50))
 
 -- Settings
-local offset = Vector3.new(0, 0, -5)
 local maxDistance = 80
 local speedEnabled = false
-local godModeEnabled = false
 
 -- Utility: Check if model is NPC
 local function isNPC(model)
@@ -90,21 +51,38 @@ local function isNPC(model)
 	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
 end
 
--- Teleport Nearby NPCs
-local function teleportNearbyNPCs()
+-- Advanced Teleport Nearby NPCs (เรียงวงกลม)
+local function teleportNearbyNPCsAdvanced()
 	local char = player.Character
 	if not char then return end
-
 	local myHRP = char:FindFirstChild("HumanoidRootPart")
 	if not myHRP then return end
 
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
-			local npc = obj.Parent
-			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
-				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
+	local npcs = {}
+	for _, model in ipairs(workspace:GetChildren()) do
+		if isNPC(model) then
+			local npcHRP = model:FindFirstChild("HumanoidRootPart")
+			if npcHRP then
+				local distance = (npcHRP.Position - myHRP.Position).Magnitude
+				if distance <= maxDistance then
+					table.insert(npcs, npcHRP)
+				end
 			end
 		end
+	end
+
+	if #npcs == 0 then return end
+
+	local radius = 5
+	local angleStep = (2 * math.pi) / #npcs
+	for i, npcHRP in ipairs(npcs) do
+		local angle = i * angleStep
+		local offsetPosition = Vector3.new(
+			math.cos(angle) * radius,
+			0,
+			math.sin(angle) * radius
+		)
+		npcHRP.CFrame = myHRP.CFrame + offsetPosition
 	end
 end
 
@@ -145,12 +123,13 @@ local function healPlayer()
 	end
 
 	local originalCFrame = hrp.CFrame
-
 	local wasAnchored = seat.Anchored
 	seat.Anchored = true
 	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
 
-	while true do
+	-- Heal loop with timeout (safety)
+	local startTime = tick()
+	repeat
 		task.wait(1)
 		local hpLabel = player:FindFirstChild("PlayerGui")
 			and player.PlayerGui:FindFirstChild("Main")
@@ -167,11 +146,8 @@ local function healPlayer()
 			if current and max and tonumber(current) == tonumber(max) then
 				break
 			end
-		else
-			warn("HP label not found!")
-			break
 		end
-	end
+	until tick() - startTime > 10 -- timeout 10 วินาที
 
 	humanoid.Sit = false
 	task.wait(0.1)
@@ -188,12 +164,6 @@ local function toggleSpeed()
 	end
 end
 
--- Toggle God Mode
-local function toggleGodMode()
-	godModeEnabled = not godModeEnabled
-	godButton.Text = "God Mode: " .. (godModeEnabled and "ON" or "OFF")
-end
-
 -- Infinite jump
 UserInputService.JumpRequest:Connect(function()
 	if humanoid then
@@ -201,37 +171,27 @@ UserInputService.JumpRequest:Connect(function()
 	end
 end)
 
--- Loops
+-- Speed loop
 RunService.Stepped:Connect(function()
 	if speedEnabled and humanoid then
 		humanoid.WalkSpeed = 60
 	end
 end)
 
--- Keep health at max if God Mode is on
-RunService.Heartbeat:Connect(function()
-	if godModeEnabled and humanoid then
-		humanoid.Health = humanoid.MaxHealth
-	end
-end)
-
 -- Connect buttons
-teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
+teleportButton.MouseButton1Click:Connect(teleportNearbyNPCsAdvanced)
 healButton.MouseButton1Click:Connect(healPlayer)
 speedButton.MouseButton1Click:Connect(toggleSpeed)
-godButton.MouseButton1Click:Connect(toggleGodMode)
 
 -- Hotkeys
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 	if input.KeyCode == Enum.KeyCode.R then
-		teleportNearbyNPCs()
+		teleportNearbyNPCsAdvanced()
 	elseif input.KeyCode == Enum.KeyCode.F then
 		healPlayer()
 	elseif input.KeyCode == Enum.KeyCode.G then
 		toggleSpeed()
-	elseif input.KeyCode == Enum.KeyCode.H then
-		toggleGodMode()
 	end
 end)
 
