@@ -12,19 +12,70 @@ player.CharacterAdded:Connect(function(char)
 	humanoid = char:WaitForChild("Humanoid")
 end)
 
--- UI creation
+-- UI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "OneClickTeleportGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
+-- Menu Button
+local menuButton = Instance.new("TextButton")
+menuButton.Size = UDim2.new(0,50,0,50)
+menuButton.Position = UDim2.new(0,10,0,10)
+menuButton.Text = "☰"
+menuButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
+menuButton.TextColor3 = Color3.new(1,1,1)
+menuButton.Font = Enum.Font.SourceSansBold
+menuButton.TextSize = 30
+menuButton.Parent = screenGui
+
+-- Menu Frame
+local menuFrame = Instance.new("Frame")
+menuFrame.Size = UDim2.new(0,170,0,0) -- เริ่มต้นเล็ก
+menuFrame.Position = UDim2.new(0,10,0,70)
+menuFrame.BackgroundColor3 = Color3.fromRGB(35,35,35)
+menuFrame.Parent = screenGui
+menuFrame.ClipsDescendants = true -- ป้องกันปุ่มล้นออกนอกกรอบ
+
 -- Settings
-local offset = Vector3.new(0, 0, -5)
+local offset = Vector3.new(0,0,-5)
 local maxDistance = 80
 local speedEnabled = false
 local flyEnabled = false
 local flySpeed = 50
 local bodyVelocity
+
+-- Buttons
+local buttons = {} -- เก็บปุ่มทั้งหมด
+
+local function createButton(name, text, color, yPos)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0,150,0,50)
+	btn.Position = UDim2.new(0,10,0,yPos)
+	btn.Text = text
+	btn.BackgroundColor3 = color
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 20
+	btn.Parent = menuFrame
+	table.insert(buttons, btn)
+	return btn
+end
+
+local teleportButton = createButton("Teleport", "Bring Enemies (R)", Color3.fromRGB(0,180,90), 10)
+local healButton = createButton("Heal", "Heal (F)", Color3.fromRGB(200,100,100), 70)
+local speedButton = createButton("Speed", "Speed (G): OFF", Color3.fromRGB(255,200,50), 130)
+local flyButton = createButton("Fly", "Fly (H): OFF", Color3.fromRGB(50,150,255), 190)
+
+-- Tween Menu
+local menuOpen = false
+local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+menuButton.MouseButton1Click:Connect(function()
+	menuOpen = not menuOpen
+	local goal = menuOpen and {Size = UDim2.new(0,170,0,250)} or {Size = UDim2.new(0,170,0,0)}
+	TweenService:Create(menuFrame, tweenInfo, goal):Play()
+end)
 
 -- Functions
 local function isNPC(model)
@@ -75,15 +126,11 @@ local function healPlayer()
 	if not hrp or not humanoid then return end
 
 	local seat = findNearestSeat()
-	if not seat then
-		warn("No usable seat found!")
-		return
-	end
-
+	if not seat then warn("No usable seat") return end
 	local originalCFrame = hrp.CFrame
 	local wasAnchored = seat.Anchored
 	seat.Anchored = true
-	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
+	hrp.CFrame = seat.CFrame + Vector3.new(0,2,0)
 
 	while true do
 		task.wait(1)
@@ -95,17 +142,11 @@ local function healPlayer()
 			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
 			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
 			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-
 		if hpLabel and hpLabel:IsA("TextLabel") then
 			local text = hpLabel.Text
-			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current) == tonumber(max) then
-				break
-			end
-		else
-			warn("HP label not found!")
-			break
-		end
+			local current, max = string.match(text,"(%d+)%s*/%s*(%d+)")
+			if current and max and tonumber(current)==tonumber(max) then break end
+		else break end
 	end
 
 	humanoid.Sit = false
@@ -114,93 +155,53 @@ local function healPlayer()
 	seat.Anchored = wasAnchored
 end
 
+-- Fly & Speed
+local function toggleSpeed()
+	speedEnabled = not speedEnabled
+	speedButton.Text = "Speed (G): "..(speedEnabled and "ON" or "OFF")
+end
+
+local function toggleFly()
+	flyEnabled = not flyEnabled
+	flyButton.Text = "Fly (H): "..(flyEnabled and "ON" or "OFF")
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	if flyEnabled then
+		bodyVelocity = Instance.new("BodyVelocity")
+		bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
+		bodyVelocity.Velocity = Vector3.new(0,0,0)
+		bodyVelocity.Parent = hrp
+	else
+		if bodyVelocity then bodyVelocity:Destroy() bodyVelocity=nil end
+	end
+end
+
+-- Connect buttons
+teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
+healButton.MouseButton1Click:Connect(healPlayer)
+speedButton.MouseButton1Click:Connect(toggleSpeed)
+flyButton.MouseButton1Click:Connect(toggleFly)
+
 -- Infinite jump
 UserInputService.JumpRequest:Connect(function()
-	if humanoid then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	end
+	if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
 end)
 
--- Buttons
-local teleportButton = Instance.new("TextButton")
-teleportButton.Size = UDim2.new(0, 150, 0, 50)
-teleportButton.Text = "Bring Enemies (R)"
-teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
-teleportButton.TextColor3 = Color3.new(1,1,1)
-teleportButton.Font = Enum.Font.SourceSansBold
-teleportButton.TextSize = 20
-
-local healButton = Instance.new("TextButton")
-healButton.Size = UDim2.new(0, 150, 0, 50)
-healButton.Text = "Heal (F)"
-healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
-healButton.TextColor3 = Color3.new(1,1,1)
-healButton.Font = Enum.Font.SourceSansBold
-healButton.TextSize = 20
-
-local speedButton = Instance.new("TextButton")
-speedButton.Size = UDim2.new(0, 150, 0, 50)
-speedButton.Text = "Speed (G): OFF"
-speedButton.BackgroundColor3 = Color3.fromRGB(255,200,50)
-speedButton.TextColor3 = Color3.new(0,0,0)
-speedButton.Font = Enum.Font.SourceSansBold
-speedButton.TextSize = 20
-
-local flyButton = Instance.new("TextButton")
-flyButton.Size = UDim2.new(0, 150, 0, 50)
-flyButton.Text = "Fly (H): OFF"
-flyButton.BackgroundColor3 = Color3.fromRGB(50,150,255)
-flyButton.TextColor3 = Color3.new(1,1,1)
-flyButton.Font = Enum.Font.SourceSansBold
-flyButton.TextSize = 20
-
--- Menu Button
-local menuButton = Instance.new("TextButton")
-menuButton.Size = UDim2.new(0,50,0,50)
-menuButton.Position = UDim2.new(0,10,0,10)
-menuButton.Text = "☰"
-menuButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-menuButton.TextColor3 = Color3.new(1,1,1)
-menuButton.Font = Enum.Font.SourceSansBold
-menuButton.TextSize = 30
-menuButton.Parent = screenGui
-
--- Menu Frame
-local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0,170,0,0)
-menuFrame.Position = UDim2.new(0,10,0,70)
-menuFrame.BackgroundColor3 = Color3.fromRGB(35,35,35)
-menuFrame.Parent = screenGui
-
--- ใส่ปุ่มทั้งหมดใน Frame
-teleportButton.Position = UDim2.new(0,10,0,10)
-healButton.Position = UDim2.new(0,10,0,70)
-speedButton.Position = UDim2.new(0,10,0,130)
-flyButton.Position = UDim2.new(0,10,0,190)
-
-teleportButton.Parent = menuFrame
-healButton.Parent = menuFrame
-speedButton.Parent = menuFrame
-flyButton.Parent = menuFrame
-
--- Tween settings
-local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-local menuOpen = false
-menuButton.MouseButton1Click:Connect(function()
-	menuOpen = not menuOpen
-	local goal = menuOpen and {Size = UDim2.new(0,170,0,250)} or {Size = UDim2.new(0,170,0,0)}
-	TweenService:Create(menuFrame, tweenInfo, goal):Play()
+-- Hotkeys
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.R then teleportNearbyNPCs()
+	elseif input.KeyCode == Enum.KeyCode.F then healPlayer()
+	elseif input.KeyCode == Enum.KeyCode.G then toggleSpeed()
+	elseif input.KeyCode == Enum.KeyCode.H then toggleFly()
+	end
 end)
 
 -- RunService loop
 RunService.Stepped:Connect(function()
-	if speedEnabled and humanoid then
-		humanoid.WalkSpeed = 60
-	elseif humanoid then
-		humanoid.WalkSpeed = 16
-	end
+	if speedEnabled and humanoid then humanoid.WalkSpeed = 60
+	elseif humanoid then humanoid.WalkSpeed = 16 end
 
-	-- Fly movement
 	if flyEnabled and bodyVelocity and humanoid then
 		local moveDir = Vector3.new(0,0,0)
 		local camera = workspace.CurrentCamera
@@ -216,47 +217,5 @@ RunService.Stepped:Connect(function()
 		else
 			bodyVelocity.Velocity = Vector3.new(0,0,0)
 		end
-	end
-end)
-
--- Toggle speed
-local function toggleSpeed()
-	speedEnabled = not speedEnabled
-	speedButton.Text = "Speed (G): " .. (speedEnabled and "ON" or "OFF")
-end
-
--- Toggle fly
-local function toggleFly()
-	flyEnabled = not flyEnabled
-	flyButton.Text = "Fly (H): " .. (flyEnabled and "ON" or "OFF")
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	if flyEnabled then
-		bodyVelocity = Instance.new("BodyVelocity")
-		bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
-		bodyVelocity.Velocity = Vector3.new(0,0,0)
-		bodyVelocity.Parent = hrp
-	else
-		if bodyVelocity then bodyVelocity:Destroy() bodyVelocity=nil end
-	end
-end
-
--- Connect button functions
-teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
-healButton.MouseButton1Click:Connect(healPlayer)
-speedButton.MouseButton1Click:Connect(toggleSpeed)
-flyButton.MouseButton1Click:Connect(toggleFly)
-
--- Hotkeys
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.R then
-		teleportNearbyNPCs()
-	elseif input.KeyCode == Enum.KeyCode.F then
-		healPlayer()
-	elseif input.KeyCode == Enum.KeyCode.G then
-		toggleSpeed()
-	elseif input.KeyCode == Enum.KeyCode.H then
-		toggleFly()
 	end
 end)
