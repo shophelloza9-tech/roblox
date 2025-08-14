@@ -117,6 +117,7 @@ local function findNearestSeat()
 	return nearest
 end
 
+-- Heal function
 local function healPlayer()
 	local char = player.Character
 	if not char then return end
@@ -132,14 +133,11 @@ local function healPlayer()
 
 	local originalCFrame = hrp.CFrame
 
-	-- Anchor the seat so it doesn't move with the player
 	local wasAnchored = seat.Anchored
 	seat.Anchored = true
 
-	-- Teleport player to seat (position a bit above so player can sit)
 	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
 
-	-- Wait until full HP
 	while true do
 		task.wait(1)
 		local hpLabel = player:FindFirstChild("PlayerGui")
@@ -152,7 +150,7 @@ local function healPlayer()
 			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
 
 		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text -- example: "120/200"
+			local text = hpLabel.Text
 			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
 			if current and max and tonumber(current) == tonumber(max) then
 				break
@@ -163,14 +161,10 @@ local function healPlayer()
 		end
 	end
 
-	-- Unsit before teleporting back
 	humanoid.Sit = false
-	task.wait(0.1) -- short wait to ensure unsitting
+	task.wait(0.1)
 
-	-- Teleport back
 	hrp.CFrame = originalCFrame
-
-	-- Restore seat anchor state
 	seat.Anchored = wasAnchored
 end
 
@@ -214,7 +208,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
--- Exit button click: remove the GUI
+-- Exit button click
 exitButton.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
