@@ -2,7 +2,6 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
@@ -12,32 +11,58 @@ player.CharacterAdded:Connect(function(char)
 	humanoid = char:WaitForChild("Humanoid")
 end)
 
--- UI
+-- ScreenGui
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "OneClickTeleportGUI"
+screenGui.Name = "MobileMenuGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Menu Button
+-- Menu Toggle Button
 local menuButton = Instance.new("TextButton")
-menuButton.Size = UDim2.new(0,50,0,50)
-menuButton.Position = UDim2.new(0,10,0,10)
-menuButton.Text = "☰"
-menuButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
+menuButton.Size = UDim2.new(0, 100, 0, 40)
+menuButton.Position = UDim2.new(0, 10, 0, 10)
+menuButton.Text = "Menu"
+menuButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 menuButton.TextColor3 = Color3.new(1,1,1)
 menuButton.Font = Enum.Font.SourceSansBold
-menuButton.TextSize = 30
+menuButton.TextSize = 20
 menuButton.Parent = screenGui
 
--- Menu Frame
+-- Menu Frame (รวมปุ่มทั้งหมด)
 local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0,170,0,0) -- เริ่มต้นเล็ก
-menuFrame.Position = UDim2.new(0,10,0,70)
-menuFrame.BackgroundColor3 = Color3.fromRGB(35,35,35)
+menuFrame.Size = UDim2.new(0, 170, 0, 0) -- เริ่มจากสูง 0
+menuFrame.Position = UDim2.new(0, 10, 0, 60)
+menuFrame.BackgroundTransparency = 0.3
+menuFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 menuFrame.Parent = screenGui
-menuFrame.ClipsDescendants = true -- ป้องกันปุ่มล้นออกนอกกรอบ
+menuFrame.ClipsDescendants = true
 
--- Settings
+-- ปุ่มทั้งหมดอยู่ใน menuFrame
+local buttonInfos = {
+	{Text = "Bring Enemies (R)", Color = Color3.fromRGB(0,180,90)},
+	{Text = "Heal (F)", Color = Color3.fromRGB(200,100,100)},
+	{Text = "Speed (G)", Color = Color3.fromRGB(255,200,50)},
+	{Text = "Fly (H)", Color = Color3.fromRGB(50,150,255)}
+}
+
+local buttons = {}
+local buttonHeight = 50
+local buttonPadding = 10
+
+for i, info in ipairs(buttonInfos) do
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 150, 0, buttonHeight)
+	btn.Position = UDim2.new(0, 10, 0, (i-1)*(buttonHeight+buttonPadding))
+	btn.Text = info.Text
+	btn.BackgroundColor3 = info.Color
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 20
+	btn.Parent = menuFrame
+	buttons[i] = btn
+end
+
+-- ตัวแปรฟังก์ชันเดิม
 local offset = Vector3.new(0,0,-5)
 local maxDistance = 80
 local speedEnabled = false
@@ -45,39 +70,6 @@ local flyEnabled = false
 local flySpeed = 50
 local bodyVelocity
 
--- Buttons
-local buttons = {} -- เก็บปุ่มทั้งหมด
-
-local function createButton(name, text, color, yPos)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0,150,0,50)
-	btn.Position = UDim2.new(0,10,0,yPos)
-	btn.Text = text
-	btn.BackgroundColor3 = color
-	btn.TextColor3 = Color3.new(1,1,1)
-	btn.Font = Enum.Font.SourceSansBold
-	btn.TextSize = 20
-	btn.Parent = menuFrame
-	table.insert(buttons, btn)
-	return btn
-end
-
-local teleportButton = createButton("Teleport", "Bring Enemies (R)", Color3.fromRGB(0,180,90), 10)
-local healButton = createButton("Heal", "Heal (F)", Color3.fromRGB(200,100,100), 70)
-local speedButton = createButton("Speed", "Speed (G): OFF", Color3.fromRGB(255,200,50), 130)
-local flyButton = createButton("Fly", "Fly (H): OFF", Color3.fromRGB(50,150,255), 190)
-
--- Tween Menu
-local menuOpen = false
-local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-
-menuButton.MouseButton1Click:Connect(function()
-	menuOpen = not menuOpen
-	local goal = menuOpen and {Size = UDim2.new(0,170,0,250)} or {Size = UDim2.new(0,170,0,0)}
-	TweenService:Create(menuFrame, tweenInfo, goal):Play()
-end)
-
--- Functions
 local function isNPC(model)
 	if not model:IsA("Model") then return false end
 	if Players:GetPlayerFromCharacter(model) then return false end
@@ -124,29 +116,27 @@ local function healPlayer()
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	local humanoid = char:FindFirstChild("Humanoid")
 	if not hrp or not humanoid then return end
-
 	local seat = findNearestSeat()
-	if not seat then warn("No usable seat") return end
+	if not seat then warn("No usable seat found!") return end
 	local originalCFrame = hrp.CFrame
 	local wasAnchored = seat.Anchored
 	seat.Anchored = true
 	hrp.CFrame = seat.CFrame + Vector3.new(0,2,0)
 
+	-- รอ HP เต็ม
 	while true do
 		task.wait(1)
-		local hpLabel = player:FindFirstChild("PlayerGui")
-			and player.PlayerGui:FindFirstChild("Main")
-			and player.PlayerGui.Main:FindFirstChild("HomePage")
-			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
-			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
-			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
+		local hpLabel = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("Main")
+			and player.PlayerGui.Main:FindFirstChild("HomePage") and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
+			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main") and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
+			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num") and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
 		if hpLabel and hpLabel:IsA("TextLabel") then
 			local text = hpLabel.Text
 			local current, max = string.match(text,"(%d+)%s*/%s*(%d+)")
 			if current and max and tonumber(current)==tonumber(max) then break end
-		else break end
+		else
+			break
+		end
 	end
 
 	humanoid.Sit = false
@@ -155,12 +145,41 @@ local function healPlayer()
 	seat.Anchored = wasAnchored
 end
 
--- Fly & Speed
+-- Infinite Jump
+UserInputService.JumpRequest:Connect(function()
+	if humanoid then
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+end)
+
+-- Loop for Speed & Fly
+RunService.Stepped:Connect(function()
+	if speedEnabled and humanoid then
+		humanoid.WalkSpeed = 60
+	elseif humanoid then
+		humanoid.WalkSpeed = 16
+	end
+
+	if flyEnabled and bodyVelocity and humanoid then
+		local moveDir = Vector3.new(0,0,0)
+		local camera = workspace.CurrentCamera
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camera.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camera.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camera.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camera.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0,1,0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0,1,0) end
+		bodyVelocity.Velocity = (moveDir.Magnitude>0) and moveDir.Unit*flySpeed or Vector3.new(0,0,0)
+	end
+end)
+
+-- Toggle Speed
 local function toggleSpeed()
 	speedEnabled = not speedEnabled
 	speedButton.Text = "Speed (G): "..(speedEnabled and "ON" or "OFF")
 end
 
+-- Toggle Fly
 local function toggleFly()
 	flyEnabled = not flyEnabled
 	flyButton.Text = "Fly (H): "..(flyEnabled and "ON" or "OFF")
@@ -172,20 +191,27 @@ local function toggleFly()
 		bodyVelocity.Velocity = Vector3.new(0,0,0)
 		bodyVelocity.Parent = hrp
 	else
-		if bodyVelocity then bodyVelocity:Destroy() bodyVelocity=nil end
+		if bodyVelocity then
+			bodyVelocity:Destroy()
+			bodyVelocity = nil
+		end
 	end
 end
 
--- Connect buttons
-teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
-healButton.MouseButton1Click:Connect(healPlayer)
-speedButton.MouseButton1Click:Connect(toggleSpeed)
-flyButton.MouseButton1Click:Connect(toggleFly)
-
--- Infinite jump
-UserInputService.JumpRequest:Connect(function()
-	if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+-- ปุ่ม Menu Animation (เลื่อนลง/ขึ้น)
+local menuOpen = false
+menuButton.MouseButton1Click:Connect(function()
+	menuOpen = not menuOpen
+	local totalHeight = (#buttons)*(buttonHeight+buttonPadding) + 10
+	local tween = TweenService:Create(menuFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0,170,0, menuOpen and totalHeight or 0)})
+	tween:Play()
 end)
+
+-- Connect Buttons
+buttons[1].MouseButton1Click:Connect(teleportNearbyNPCs)
+buttons[2].MouseButton1Click:Connect(healPlayer)
+buttons[3].MouseButton1Click:Connect(toggleSpeed)
+buttons[4].MouseButton1Click:Connect(toggleFly)
 
 -- Hotkeys
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -194,28 +220,5 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	elseif input.KeyCode == Enum.KeyCode.F then healPlayer()
 	elseif input.KeyCode == Enum.KeyCode.G then toggleSpeed()
 	elseif input.KeyCode == Enum.KeyCode.H then toggleFly()
-	end
-end)
-
--- RunService loop
-RunService.Stepped:Connect(function()
-	if speedEnabled and humanoid then humanoid.WalkSpeed = 60
-	elseif humanoid then humanoid.WalkSpeed = 16 end
-
-	if flyEnabled and bodyVelocity and humanoid then
-		local moveDir = Vector3.new(0,0,0)
-		local camera = workspace.CurrentCamera
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0,1,0) end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0,1,0) end
-
-		if moveDir.Magnitude > 0 then
-			bodyVelocity.Velocity = moveDir.Unit * flySpeed
-		else
-			bodyVelocity.Velocity = Vector3.new(0,0,0)
-		end
 	end
 end)
