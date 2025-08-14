@@ -1,230 +1,61 @@
+-- AutoFarm Module
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 
 player.CharacterAdded:Connect(function(char)
-	character = char
-	humanoid = char:WaitForChild("Humanoid")
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
 end)
 
--- Settings
-local offset = Vector3.new(0,0,-5)
-local maxDistance = 80
-local speedEnabled = false
-local flyEnabled = false
-local flySpeed = 50
-local bodyVelocity
-local autoFarmEnabled = false
-local attackRange = 10
-local attackDamage = 10
+local AutoFarm = {}
+AutoFarm.Enabled = false
+AutoFarm.Range = 10
+AutoFarm.Damage = 10
 
--- UI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "MobileMenuGUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
-
-local menuButton = Instance.new("TextButton")
-menuButton.Size = UDim2.new(0,100,0,40)
-menuButton.Position = UDim2.new(0,10,0,10)
-menuButton.Text = "Menu"
-menuButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-menuButton.TextColor3 = Color3.new(1,1,1)
-menuButton.Font = Enum.Font.SourceSansBold
-menuButton.TextSize = 20
-menuButton.Parent = screenGui
-
-local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0,170,0,0)
-menuFrame.Position = UDim2.new(0,10,0,60)
-menuFrame.BackgroundTransparency = 0.3
-menuFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-menuFrame.ClipsDescendants = true
-menuFrame.Parent = screenGui
-
--- Buttons
-local buttonInfos = {
-	{Text="Bring Enemies (R)", Color=Color3.fromRGB(0,180,90)},
-	{Text="Heal (F)", Color=Color3.fromRGB(200,100,100)},
-	{Text="Speed (G)", Color=Color3.fromRGB(255,200,50)},
-	{Text="Fly (H)", Color=Color3.fromRGB(50,150,255)},
-	{Text="Auto Farm (T)", Color=Color3.fromRGB(180,0,180)}
-}
-
-local buttons = {}
-local buttonHeight = 50
-local buttonPadding = 10
-for i, info in ipairs(buttonInfos) do
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0,150,0,buttonHeight)
-	btn.Position = UDim2.new(0,10,(i-1)*(buttonHeight+buttonPadding))
-	btn.Text = info.Text
-	btn.BackgroundColor3 = info.Color
-	btn.TextColor3 = Color3.new(1,1,1)
-	btn.Font = Enum.Font.SourceSansBold
-	btn.TextSize = 20
-	btn.Parent = menuFrame
-	buttons[i] = btn
-end
-
--- Utility
+-- ตรวจสอบ NPC
 local function isNPC(model)
-	if not model:IsA("Model") then return false end
-	if Players:GetPlayerFromCharacter(model) then return false end
-	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
+    if not model:IsA("Model") then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+    return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
 end
 
--- Teleport nearby NPCs (เหมือนเดิม)
-local function teleportNearbyNPCs()
-	local char = character
-	if not char then return end
-	local myHRP = char:FindFirstChild("HumanoidRootPart")
-	if not myHRP then return end
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Part") and obj.Name=="HumanoidRootPart" then
-			local npc = obj.Parent
-			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
-				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
-			end
-		end
-	end
-end
-
--- Heal Player
-local function findNearestSeat()
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return nil end
-	local nearest, shortest = nil, math.huge
-	for _, seat in ipairs(workspace:GetDescendants()) do
-		if seat:IsA("Seat") and not seat.Disabled then
-			local dist = (seat.Position - hrp.Position).Magnitude
-			if dist < shortest then nearest,shortest=seat,dist end
-		end
-	end
-	return nearest
-end
-
-local function healPlayer()
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character:FindFirstChild("Humanoid")
-	if not hrp or not humanoid then return end
-	local seat = findNearestSeat()
-	if not seat then warn("No seat found!") return end
-	local originalCFrame = hrp.CFrame
-	local wasAnchored = seat.Anchored
-	seat.Anchored = true
-	hrp.CFrame = seat.CFrame + Vector3.new(0,2,0)
-
-	while true do
-		task.wait(1)
-		local hpLabel = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("Main")
-		and player.PlayerGui.Main:FindFirstChild("HomePage") and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
-		and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main") and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
-		and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num") and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text
-			local current,max = string.match(text,"(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current)==tonumber(max) then break end
-		else break end
-	end
-
-	humanoid.Sit = false
-	task.wait(0.1)
-	hrp.CFrame = originalCFrame
-	seat.Anchored = wasAnchored
-end
-
--- Auto Farm
+-- คืนค่ารายการ Humanoid ที่อยู่ในระยะ
 local function getNearbyNPCs()
-	local npcs = {}
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return npcs end
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
-			if not Players:GetPlayerFromCharacter(obj) then
-				local dist = (hrp.Position - obj.HumanoidRootPart.Position).Magnitude
-				if dist <= attackRange then table.insert(npcs,obj.Humanoid) end
-			end
-		end
-	end
-	return npcs
+    local npcs = {}
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return npcs end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            if not Players:GetPlayerFromCharacter(obj) then
+                local dist = (hrp.Position - obj.HumanoidRootPart.Position).Magnitude
+                if dist <= AutoFarm.Range then
+                    table.insert(npcs, obj.Humanoid)
+                end
+            end
+        end
+    end
+    return npcs
 end
 
--- Loop Speed/Fly/AutoFarm
+-- Loop ตี NPC ใกล้ตัว
 RunService.Stepped:Connect(function()
-	-- Speed
-	if speedEnabled and humanoid then humanoid.WalkSpeed=60 elseif humanoid then humanoid.WalkSpeed=16 end
-
-	-- Fly
-	if flyEnabled and bodyVelocity and humanoid then
-		local moveDir = Vector3.new(0,0,0)
-		local cam = workspace.CurrentCamera
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir+=cam.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir-=cam.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir-=cam.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir+=cam.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir+=Vector3.new(0,1,0) end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir-=Vector3.new(0,1,0) end
-		bodyVelocity.Velocity=(moveDir.Magnitude>0) and moveDir.Unit*flySpeed or Vector3.new(0,0,0)
-	end
-
-	-- Auto Farm
-	if autoFarmEnabled then
-		for _, npcHumanoid in ipairs(getNearbyNPCs()) do
-			if npcHumanoid.Health>0 then npcHumanoid:TakeDamage(attackDamage) end
-		end
-	end
+    if AutoFarm.Enabled then
+        for _, npcHumanoid in ipairs(getNearbyNPCs()) do
+            if npcHumanoid.Health > 0 then
+                npcHumanoid:TakeDamage(AutoFarm.Damage)
+            end
+        end
+    end
 end)
 
--- Toggle Speed/Fly/AutoFarm
-local function toggleSpeed() speedEnabled=not speedEnabled; buttons[3].Text="Speed (G): "..(speedEnabled and "ON" or "OFF") end
-local function toggleFly()
-	flyEnabled=not flyEnabled; buttons[4].Text="Fly (H): "..(flyEnabled and "ON" or "OFF")
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	if flyEnabled then
-		bodyVelocity=Instance.new("BodyVelocity")
-		bodyVelocity.MaxForce=Vector3.new(1e5,1e5,1e5)
-		bodyVelocity.Velocity=Vector3.new(0,0,0)
-		bodyVelocity.Parent=hrp
-	else
-		if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity=nil end
-	end
+-- Toggle AutoFarm
+function AutoFarm:Toggle()
+    self.Enabled = not self.Enabled
+    return self.Enabled
 end
-local function toggleAutoFarm() autoFarmEnabled=not autoFarmEnabled; buttons[5].Text="Auto Farm (T): "..(autoFarmEnabled and "ON" or "OFF") end
 
--- Menu Animation
-local menuOpen=false
-menuButton.MouseButton1Click:Connect(function()
-	menuOpen=not menuOpen
-	local totalHeight=(#buttons)*(buttonHeight+buttonPadding)+10
-	local tween=TweenService:Create(menuFrame,TweenInfo.new(0.4,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Size=UDim2.new(0,170,0, menuOpen and totalHeight or 0)})
-	tween:Play()
-end)
-
--- Connect Buttons
-buttons[1].MouseButton1Click:Connect(teleportNearbyNPCs)
-buttons[2].MouseButton1Click:Connect(healPlayer)
-buttons[3].MouseButton1Click:Connect(toggleSpeed)
-buttons[4].MouseButton1Click:Connect(toggleFly)
-buttons[5].MouseButton1Click:Connect(toggleAutoFarm)
-
--- Hotkeys
-UserInputService.InputBegan:Connect(function(input,gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode==Enum.KeyCode.R then teleportNearbyNPCs()
-	elseif input.KeyCode==Enum.KeyCode.F then healPlayer()
-	elseif input.KeyCode==Enum.KeyCode.G then toggleSpeed()
-	elseif input.KeyCode==Enum.KeyCode.H then toggleFly()
-	elseif input.KeyCode==Enum.KeyCode.T then toggleAutoFarm()
-	end
-end)
-
--- Infinite jump
-UserInputService.JumpRequest:Connect(function()
-	if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
-end)
+return AutoFarm
