@@ -11,88 +11,17 @@ player.CharacterAdded:Connect(function(char)
 	humanoid = char:WaitForChild("Humanoid")
 end)
 
--- UI creation
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "OneClickTeleportGUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
-
--- Exit Button
-local exitButton = Instance.new("TextButton")
-exitButton.Name = "ExitButton"
-exitButton.Size = UDim2.new(0, 150, 0, 50)
-exitButton.Position = UDim2.new(0, 10, 0, 10)
-exitButton.Text = "Exit"
-exitButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-exitButton.TextColor3 = Color3.new(1, 1, 1)
-exitButton.Font = Enum.Font.SourceSansBold
-exitButton.TextSize = 20
-exitButton.Parent = screenGui
-
--- Teleport NPCs Button
-local teleportButton = Instance.new("TextButton")
-teleportButton.Name = "TeleportButton"
-teleportButton.Size = UDim2.new(0, 150, 0, 50)
-teleportButton.Position = UDim2.new(0, 10, 0, 70)
-teleportButton.Text = "Bring Enemies (R)"
-teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
-teleportButton.TextColor3 = Color3.new(1, 1, 1)
-teleportButton.Font = Enum.Font.SourceSansBold
-teleportButton.TextSize = 20
-teleportButton.Parent = screenGui
-
--- Heal Button
-local healButton = Instance.new("TextButton")
-healButton.Name = "HealButton"
-healButton.Size = UDim2.new(0, 150, 0, 50)
-healButton.Position = UDim2.new(0, 10, 0, 130)
-healButton.Text = "Heal (F)"
-healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
-healButton.TextColor3 = Color3.new(1, 1, 1)
-healButton.Font = Enum.Font.SourceSansBold
-healButton.TextSize = 20
-healButton.Parent = screenGui
-
--- Speed Toggle Button
-local speedButton = Instance.new("TextButton")
-speedButton.Name = "SpeedButton"
-speedButton.Size = UDim2.new(0, 150, 0, 50)
-speedButton.Position = UDim2.new(0, 10, 0, 190)
-speedButton.Text = "Speed (G): OFF"
-speedButton.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-speedButton.TextColor3 = Color3.new(0, 0, 0)
-speedButton.Font = Enum.Font.SourceSansBold
-speedButton.TextSize = 20
-speedButton.Parent = screenGui
-
 -- Settings
 local offset = Vector3.new(0, 0, -5)
 local maxDistance = 80
 local speedEnabled = false
+local isHealing = false
 
 -- Utility: Check if model is NPC
 local function isNPC(model)
 	if not model:IsA("Model") then return false end
 	if Players:GetPlayerFromCharacter(model) then return false end
 	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
-end
-
--- Teleport Nearby NPCs
-local function teleportNearbyNPCs()
-	local char = player.Character
-	if not char then return end
-
-	local myHRP = char:FindFirstChild("HumanoidRootPart")
-	if not myHRP then return end
-
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
-			local npc = obj.Parent
-			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
-				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
-			end
-		end
-	end
 end
 
 -- Find nearest usable seat
@@ -117,7 +46,25 @@ local function findNearestSeat()
 	return nearest
 end
 
--- Heal function (warp to seat)
+-- Teleport Nearby NPCs
+local function teleportNearbyNPCs()
+	local char = player.Character
+	if not char then return end
+
+	local myHRP = char:FindFirstChild("HumanoidRootPart")
+	if not myHRP then return end
+
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
+			local npc = obj.Parent
+			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
+				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
+			end
+		end
+	end
+end
+
+-- Heal Player
 local function healPlayer()
 	local char = player.Character
 	if not char then return end
@@ -132,42 +79,95 @@ local function healPlayer()
 	end
 
 	local originalCFrame = hrp.CFrame
-
-	-- Anchor the seat
 	local wasAnchored = seat.Anchored
 	seat.Anchored = true
 
-	-- Warp player to seat
 	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
-	task.wait(0.1)
 
-	-- Wait until full HP
-	while humanoid.Health < humanoid.MaxHealth do
-		task.wait(0.1)
+	-- Wait until full HP via GUI
+	while true do
+		task.wait(1)
+		local hpLabel = player:FindFirstChild("PlayerGui")
+			and player.PlayerGui:FindFirstChild("Main")
+			and player.PlayerGui.Main:FindFirstChild("HomePage")
+			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
+			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
+			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
+			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
+			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
+
+		if hpLabel and hpLabel:IsA("TextLabel") then
+			local text = hpLabel.Text
+			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
+			if current and max and tonumber(current) == tonumber(max) then
+				break
+			end
+		else
+			warn("HP label not found!")
+			break
+		end
 	end
 
-	-- Unsit and return
 	humanoid.Sit = false
 	task.wait(0.1)
 	hrp.CFrame = originalCFrame
 	seat.Anchored = wasAnchored
 end
 
--- Infinite jump
-UserInputService.JumpRequest:Connect(function()
-	if humanoid then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	end
-end)
+-- UI creation
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "OneClickTeleportGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- LoopSpeed function
-RunService.Stepped:Connect(function()
-	if speedEnabled and humanoid then
-		humanoid.WalkSpeed = 60
-	end
-end)
+-- Exit Button
+local exitButton = Instance.new("TextButton")
+exitButton.Size = UDim2.new(0, 150, 0, 50)
+exitButton.Position = UDim2.new(0, 10, 0, 10)
+exitButton.Text = "Exit"
+exitButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+exitButton.TextColor3 = Color3.new(1, 1, 1)
+exitButton.Font = Enum.Font.SourceSansBold
+exitButton.TextSize = 20
+exitButton.Parent = screenGui
 
--- Toggle speed
+-- Teleport NPCs Button
+local teleportButton = Instance.new("TextButton")
+teleportButton.Size = UDim2.new(0, 150, 0, 50)
+teleportButton.Position = UDim2.new(0, 10, 0, 70)
+teleportButton.Text = "Bring Enemies (R)"
+teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
+teleportButton.TextColor3 = Color3.new(1, 1, 1)
+teleportButton.Font = Enum.Font.SourceSansBold
+teleportButton.TextSize = 20
+teleportButton.Parent = screenGui
+
+-- Heal Button
+local healButton = Instance.new("TextButton")
+healButton.Size = UDim2.new(0, 150, 0, 50)
+healButton.Position = UDim2.new(0, 10, 0, 130)
+healButton.Text = "Heal (F)"
+healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+healButton.TextColor3 = Color3.new(1, 1, 1)
+healButton.Font = Enum.Font.SourceSansBold
+healButton.TextSize = 20
+healButton.Parent = screenGui
+
+-- Speed Toggle Button
+local speedButton = Instance.new("TextButton")
+speedButton.Size = UDim2.new(0, 150, 0, 50)
+speedButton.Position = UDim2.new(0, 10, 0, 190)
+speedButton.Text = "Speed (G): OFF"
+speedButton.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
+speedButton.TextColor3 = Color3.new(0, 0, 0)
+speedButton.Font = Enum.Font.SourceSansBold
+speedButton.TextSize = 20
+speedButton.Parent = screenGui
+
+-- Button connections
+teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
+healButton.MouseButton1Click:Connect(healPlayer)
+
 local function toggleSpeed()
 	speedEnabled = not speedEnabled
 	speedButton.Text = "Speed (G): " .. (speedEnabled and "ON" or "OFF")
@@ -176,10 +176,10 @@ local function toggleSpeed()
 	end
 end
 
--- Connect buttons
-teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
-healButton.MouseButton1Click:Connect(healPlayer)
 speedButton.MouseButton1Click:Connect(toggleSpeed)
+exitButton.MouseButton1Click:Connect(function()
+	screenGui:Destroy()
+end)
 
 -- Hotkeys
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -193,37 +193,28 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
--- Exit button click
-exitButton.MouseButton1Click:Connect(function()
-	screenGui:Destroy()
+-- Infinite jump
+UserInputService.JumpRequest:Connect(function()
+	if humanoid then
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
 end)
 
--- =========================
--- Auto Heal when HP < 30%
--- =========================
-local isHealing = false
+-- LoopSpeed
+RunService.Stepped:Connect(function()
+	if speedEnabled and humanoid then
+		humanoid.WalkSpeed = 60
+	end
+end)
 
-local function onHealthChanged(health)
+-- Auto Heal when HP < 30%
+RunService.Heartbeat:Connect(function()
 	if not humanoid or humanoid.Health <= 0 then return end
 	if isHealing then return end
 
-	local maxHealth = humanoid.MaxHealth
-	if maxHealth > 0 and (health / maxHealth) <= 0.3 then
+	if humanoid.Health / humanoid.MaxHealth <= 0.3 then
 		isHealing = true
-		task.spawn(function()
-			healPlayer()
-			isHealing = false
-		end)
+		healPlayer()
+		isHealing = false
 	end
-end
-
--- Connect auto heal
-if humanoid then
-	humanoid.HealthChanged:Connect(onHealthChanged)
-end
-
-player.CharacterAdded:Connect(function(char)
-	character = char
-	humanoid = char:WaitForChild("Humanoid")
-	humanoid.HealthChanged:Connect(onHealthChanged)
 end)
