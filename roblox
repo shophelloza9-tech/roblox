@@ -17,68 +17,28 @@ screenGui.Name = "OneClickTeleportGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Exit Button
-local exitButton = Instance.new("TextButton")
-exitButton.Name = "ExitButton"
-exitButton.Size = UDim2.new(0, 150, 0, 50)
-exitButton.Position = UDim2.new(0, 10, 0, 10)
-exitButton.Text = "Exit"
-exitButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-exitButton.TextColor3 = Color3.new(1, 1, 1)
-exitButton.Font = Enum.Font.SourceSansBold
-exitButton.TextSize = 20
-exitButton.Parent = screenGui
+local function createButton(name, posY, text, color)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = UDim2.new(0, 150, 0, 50)
+	btn.Position = UDim2.new(0, 10, 0, posY)
+	btn.Text = text
+	btn.BackgroundColor3 = color
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 20
+	btn.Parent = screenGui
+	return btn
+end
 
--- Teleport NPCs Button
-local teleportButton = Instance.new("TextButton")
-teleportButton.Name = "TeleportButton"
-teleportButton.Size = UDim2.new(0, 150, 0, 50)
-teleportButton.Position = UDim2.new(0, 10, 0, 70)
-teleportButton.Text = "Bring Enemies (R)"
-teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
-teleportButton.TextColor3 = Color3.new(1, 1, 1)
-teleportButton.Font = Enum.Font.SourceSansBold
-teleportButton.TextSize = 20
-teleportButton.Parent = screenGui
-
--- Heal Button
-local healButton = Instance.new("TextButton")
-healButton.Name = "HealButton"
-healButton.Size = UDim2.new(0, 150, 0, 50)
-healButton.Position = UDim2.new(0, 10, 0, 130)
-healButton.Text = "Heal (F)"
-healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
-healButton.TextColor3 = Color3.new(1, 1, 1)
-healButton.Font = Enum.Font.SourceSansBold
-healButton.TextSize = 20
-healButton.Parent = screenGui
-
--- Speed Toggle Button
-local speedButton = Instance.new("TextButton")
-speedButton.Name = "SpeedButton"
-speedButton.Size = UDim2.new(0, 150, 0, 50)
-speedButton.Position = UDim2.new(0, 10, 0, 190)
-speedButton.Text = "Speed (G): OFF"
-speedButton.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-speedButton.TextColor3 = Color3.new(0, 0, 0)
-speedButton.Font = Enum.Font.SourceSansBold
-speedButton.TextSize = 20
-speedButton.Parent = screenGui
-
--- Fly Toggle Button
-local flyButton = Instance.new("TextButton")
-flyButton.Name = "FlyButton"
-flyButton.Size = UDim2.new(0, 150, 0, 50)
-flyButton.Position = UDim2.new(0, 10, 0, 250)
-flyButton.Text = "Fly (H): OFF"
-flyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
-flyButton.TextColor3 = Color3.new(1, 1, 1)
-flyButton.Font = Enum.Font.SourceSansBold
-flyButton.TextSize = 20
-flyButton.Parent = screenGui
+local exitButton = createButton("ExitButton", 10, "Exit", Color3.fromRGB(180,0,0))
+local teleportButton = createButton("TeleportButton", 70, "Bring Enemies (R)", Color3.fromRGB(0,180,90))
+local healButton = createButton("HealButton", 130, "Heal (F)", Color3.fromRGB(200,100,100))
+local speedButton = createButton("SpeedButton", 190, "Speed (G): OFF", Color3.fromRGB(255,200,50))
+local flyButton = createButton("FlyButton", 250, "Fly (H): OFF", Color3.fromRGB(50,150,255))
 
 -- Settings
-local offset = Vector3.new(0, 0, -5)
+local offset = Vector3.new(0,0,-5)
 local maxDistance = 80
 local speedEnabled = false
 local flyEnabled = false
@@ -96,7 +56,6 @@ end
 local function teleportNearbyNPCs()
 	local char = player.Character
 	if not char then return end
-
 	local myHRP = char:FindFirstChild("HumanoidRootPart")
 	if not myHRP then return end
 
@@ -119,7 +78,6 @@ local function findNearestSeat()
 
 	local nearest = nil
 	local shortestDist = math.huge
-
 	for _, seat in ipairs(workspace:GetDescendants()) do
 		if seat:IsA("Seat") and not seat.Disabled then
 			local dist = (seat.Position - hrp.Position).Magnitude
@@ -132,6 +90,7 @@ local function findNearestSeat()
 	return nearest
 end
 
+-- Heal player
 local function healPlayer()
 	local char = player.Character
 	if not char then return end
@@ -140,21 +99,13 @@ local function healPlayer()
 	if not hrp or not humanoid then return end
 
 	local seat = findNearestSeat()
-	if not seat then
-		warn("No usable seat found!")
-		return
-	end
-
+	if not seat then warn("No usable seat found!") return end
 	local originalCFrame = hrp.CFrame
-
-	-- Anchor the seat so it doesn't move with the player
 	local wasAnchored = seat.Anchored
 	seat.Anchored = true
+	hrp.CFrame = seat.CFrame + Vector3.new(0,2,0)
 
-	-- Teleport player to seat (position a bit above so player can sit)
-	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
-
-	-- Wait until full HP
+	-- Wait full HP
 	while true do
 		task.wait(1)
 		local hpLabel = player:FindFirstChild("PlayerGui")
@@ -165,27 +116,18 @@ local function healPlayer()
 			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
 			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
 			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-
 		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text -- example: "120/200"
+			local text = hpLabel.Text
 			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current) == tonumber(max) then
-				break
-			end
+			if current and max and tonumber(current) == tonumber(max) then break end
 		else
-			warn("HP label not found!")
 			break
 		end
 	end
 
-	-- Unsit before teleporting back
 	humanoid.Sit = false
-	task.wait(0.1) -- short wait to ensure unsitting
-
-	-- Teleport back
+	task.wait(0.1)
 	hrp.CFrame = originalCFrame
-
-	-- Restore seat anchor state
 	seat.Anchored = wasAnchored
 end
 
@@ -196,15 +138,16 @@ UserInputService.JumpRequest:Connect(function()
 	end
 end)
 
--- LoopSpeed function
+-- LoopSpeed + Fly
 RunService.Stepped:Connect(function()
+	-- Speed
 	if speedEnabled and humanoid then
 		humanoid.WalkSpeed = 60
 	elseif humanoid then
 		humanoid.WalkSpeed = 16
 	end
 
-	-- Fly movement
+	-- Fly
 	if flyEnabled and bodyVelocity and humanoid then
 		local moveDir = Vector3.new(0,0,0)
 		local camera = workspace.CurrentCamera
@@ -214,41 +157,28 @@ RunService.Stepped:Connect(function()
 		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camera.CFrame.RightVector end
 		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0,1,0) end
 		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0,1,0) end
-
-		if moveDir.Magnitude > 0 then
-			bodyVelocity.Velocity = moveDir.Unit * flySpeed
-		else
-			bodyVelocity.Velocity = Vector3.new(0,0,0)
-		end
+		bodyVelocity.Velocity = (moveDir.Magnitude>0) and moveDir.Unit*flySpeed or Vector3.new(0,0,0)
 	end
 end)
 
--- Toggle speed
+-- Toggle functions
 local function toggleSpeed()
 	speedEnabled = not speedEnabled
-	speedButton.Text = "Speed (G): " .. (speedEnabled and "ON" or "OFF")
+	speedButton.Text = "Speed (G): "..(speedEnabled and "ON" or "OFF")
 end
 
--- Toggle fly
 local function toggleFly()
 	flyEnabled = not flyEnabled
-	flyButton.Text = "Fly (H): " .. (flyEnabled and "ON" or "OFF")
-
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
+	flyButton.Text = "Fly (H): "..(flyEnabled and "ON" or "OFF")
+	local hrp = character:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
-
 	if flyEnabled then
 		bodyVelocity = Instance.new("BodyVelocity")
-		bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+		bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
 		bodyVelocity.Velocity = Vector3.new(0,0,0)
 		bodyVelocity.Parent = hrp
 	else
-		if bodyVelocity then
-			bodyVelocity:Destroy()
-			bodyVelocity = nil
-		end
+		if bodyVelocity then bodyVelocity:Destroy() bodyVelocity=nil end
 	end
 end
 
@@ -261,18 +191,14 @@ flyButton.MouseButton1Click:Connect(toggleFly)
 -- Hotkeys
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.R then
-		teleportNearbyNPCs()
-	elseif input.KeyCode == Enum.KeyCode.F then
-		healPlayer()
-	elseif input.KeyCode == Enum.KeyCode.G then
-		toggleSpeed()
-	elseif input.KeyCode == Enum.KeyCode.H then
-		toggleFly()
+	if input.KeyCode == Enum.KeyCode.R then teleportNearbyNPCs()
+	elseif input.KeyCode == Enum.KeyCode.F then healPlayer()
+	elseif input.KeyCode == Enum.KeyCode.G then toggleSpeed()
+	elseif input.KeyCode == Enum.KeyCode.H then toggleFly()
 	end
 end)
 
--- Exit button click: remove the GUI
+-- Exit GUI
 exitButton.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
