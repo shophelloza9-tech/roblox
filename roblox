@@ -117,7 +117,7 @@ local function findNearestSeat()
 	return nearest
 end
 
--- Heal function
+-- Heal function (warp to seat)
 local function healPlayer()
 	local char = player.Character
 	if not char then return end
@@ -133,37 +133,22 @@ local function healPlayer()
 
 	local originalCFrame = hrp.CFrame
 
+	-- Anchor the seat
 	local wasAnchored = seat.Anchored
 	seat.Anchored = true
 
+	-- Warp player to seat
 	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
-
-	while true do
-		task.wait(1)
-		local hpLabel = player:FindFirstChild("PlayerGui")
-			and player.PlayerGui:FindFirstChild("Main")
-			and player.PlayerGui.Main:FindFirstChild("HomePage")
-			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
-			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
-			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-
-		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text
-			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current) == tonumber(max) then
-				break
-			end
-		else
-			warn("HP label not found!")
-			break
-		end
-	end
-
-	humanoid.Sit = false
 	task.wait(0.1)
 
+	-- Wait until full HP
+	while humanoid.Health < humanoid.MaxHealth do
+		task.wait(0.1)
+	end
+
+	-- Unsit and return
+	humanoid.Sit = false
+	task.wait(0.1)
 	hrp.CFrame = originalCFrame
 	seat.Anchored = wasAnchored
 end
@@ -213,18 +198,32 @@ exitButton.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
 
+-- =========================
 -- Auto Heal when HP < 30%
+-- =========================
 local isHealing = false
-RunService.Heartbeat:Connect(function()
+
+local function onHealthChanged(health)
 	if not humanoid or humanoid.Health <= 0 then return end
 	if isHealing then return end
 
-	local currentHealth = humanoid.Health
 	local maxHealth = humanoid.MaxHealth
-
-	if maxHealth > 0 and (currentHealth / maxHealth) <= 0.3 then
+	if maxHealth > 0 and (health / maxHealth) <= 0.3 then
 		isHealing = true
-		healPlayer()
-		isHealing = false
+		task.spawn(function()
+			healPlayer()
+			isHealing = false
+		end)
 	end
+end
+
+-- Connect auto heal
+if humanoid then
+	humanoid.HealthChanged:Connect(onHealthChanged)
+end
+
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	humanoid.HealthChanged:Connect(onHealthChanged)
 end)
