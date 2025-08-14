@@ -86,73 +86,10 @@ local function teleportNearbyNPCsAdvanced()
 	end
 end
 
--- Find nearest usable seat
-local function findNearestSeat()
-	local char = player.Character
-	if not char then return nil end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return nil end
-
-	local nearest = nil
-	local shortestDist = math.huge
-
-	for _, seat in ipairs(workspace:GetDescendants()) do
-		if seat:IsA("Seat") and not seat.Disabled then
-			local dist = (seat.Position - hrp.Position).Magnitude
-			if dist < shortestDist then
-				shortestDist = dist
-				nearest = seat
-			end
-		end
-	end
-	return nearest
-end
-
--- Heal player by sitting
+-- Heal player by filling Humanoid HP directly
 local function healPlayer()
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	local humanoid = char:FindFirstChild("Humanoid")
-	if not hrp or not humanoid then return end
-
-	local seat = findNearestSeat()
-	if not seat then
-		warn("No usable seat found!")
-		return
-	end
-
-	local originalCFrame = hrp.CFrame
-	local wasAnchored = seat.Anchored
-	seat.Anchored = true
-	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
-
-	-- Heal loop with timeout
-	local startTime = tick()
-	repeat
-		task.wait(1)
-		local hpLabel = player:FindFirstChild("PlayerGui")
-			and player.PlayerGui:FindFirstChild("Main")
-			and player.PlayerGui.Main:FindFirstChild("HomePage")
-			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
-			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
-			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-
-		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text
-			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current) == tonumber(max) then
-				break
-			end
-		end
-	until tick() - startTime > 10 -- timeout 10 วินาที
-
-	humanoid.Sit = false
-	task.wait(0.1)
-	hrp.CFrame = originalCFrame
-	seat.Anchored = wasAnchored
+	if not humanoid then return end
+	humanoid.Health = humanoid.MaxHealth
 end
 
 -- Toggle speed
