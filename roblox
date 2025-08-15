@@ -1,4 +1,4 @@
--- Dungeon Lootify All-in-One ESP + Hover + Hitbox GUI (Auto Hover Next Monster)
+-- Dungeon Lootify All-in-One ESP + Hover GUI (No Hitbox)
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -49,17 +49,9 @@ local function scanMonsters()
             local model = obj.Parent
             if model ~= LocalPlayer.Character and model:FindFirstChild("HumanoidRootPart") then
                 table.insert(monsters, model)
-
-                -- สร้าง ESP
                 if espEnabled then
                     createESP(model)
                 end
-
-                -- ขยาย Hitbox
-                local hrp = model.HumanoidRootPart
-                hrp.Size = Vector3.new(6, 6, 6)
-                hrp.Transparency = 0.5
-                hrp.CanCollide = false
             end
         end
     end
@@ -121,27 +113,50 @@ local function getNearestMonster()
     return nearest
 end
 
--- ฟังก์ชันวาร์ปและลอยบนหัวมอนตัวใกล้ที่สุดต่อเนื่อง
+-- Hover Variables
+local hoverConn = nil
+local bodyPos = nil
+local isHovering = false
+
+-- ฟังก์ชัน Auto Hover
 local function autoHoverNearestMonster()
     local hrp = getHRP()
     if not hrp then return end
 
-    local bodyPos = Instance.new("BodyPosition")
+    -- ถ้ามี hover อยู่แล้ว ให้หยุดก่อน
+    if bodyPos then bodyPos:Destroy() end
+    if hoverConn then hoverConn:Disconnect() end
+
+    bodyPos = Instance.new("BodyPosition")
     bodyPos.MaxForce = Vector3.new(1e5,1e5,1e5)
     bodyPos.P = 1e4
     bodyPos.D = 100
     bodyPos.Parent = hrp
 
-    local hoverConn
+    isHovering = true
+
     hoverConn = RunService.RenderStepped:Connect(function()
+        if not isHovering then return end
         local target = getNearestMonster()
         if target then
             bodyPos.Position = target.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
         else
-            -- ไม่มีมอนที่เหลือ → รักษาตำแหน่งเดิม
             bodyPos.Position = hrp.Position
         end
     end)
+end
+
+-- ฟังก์ชัน Stop Hover
+local function stopHover()
+    isHovering = false
+    if hoverConn then
+        hoverConn:Disconnect()
+        hoverConn = nil
+    end
+    if bodyPos then
+        bodyPos:Destroy()
+        bodyPos = nil
+    end
 end
 
 -- GUI
@@ -177,7 +192,7 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- ปุ่มเริ่ม Hover อัตโนมัติบนหัวมอนตัวใกล้ที่สุด
+-- ปุ่มเริ่ม Hover อัตโนมัติ
 local tpButton = Instance.new("TextButton")
 tpButton.Size = UDim2.new(0, 200, 0, 50)
 tpButton.Position = UDim2.new(0, 20, 0, 260)
@@ -190,4 +205,19 @@ tpButton.Parent = screenGui
 
 tpButton.MouseButton1Click:Connect(function()
     autoHoverNearestMonster()
+end)
+
+-- ปุ่มหยุด Hover
+local stopButton = Instance.new("TextButton")
+stopButton.Size = UDim2.new(0, 150, 0, 50)
+stopButton.Position = UDim2.new(0, 20, 0, 320)
+stopButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+stopButton.Text = "Stop Hover"
+stopButton.TextScaled = true
+stopButton.Font = Enum.Font.SourceSansBold
+stopButton.TextColor3 = Color3.new(1, 1, 1)
+stopButton.Parent = screenGui
+
+stopButton.MouseButton1Click:Connect(function()
+    stopHover()
 end)
