@@ -1,4 +1,4 @@
--- Dungeon Lootify All-in-One ESP + Hover + Hitbox GUI
+-- Dungeon Lootify All-in-One ESP + Hover + Hitbox GUI (Auto Hover Next Monster)
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -109,7 +109,7 @@ local function getNearestMonster()
 
     for _, mob in ipairs(monsters) do
         if mob and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") then
-            if mob:FindFirstChild("MonsterESP") then
+            if mob:FindFirstChild("MonsterESP") and mob.Humanoid.Health > 0 then
                 local dist = (mob.HumanoidRootPart.Position - hrp.Position).Magnitude
                 if dist < nearestDist then
                     nearestDist = dist
@@ -121,28 +121,25 @@ local function getNearestMonster()
     return nearest
 end
 
--- ฟังก์ชันวาร์ปและลอยบนหัวมอนด้วย BodyPosition
-local function hoverOnMonster(monster)
+-- ฟังก์ชันวาร์ปและลอยบนหัวมอนตัวใกล้ที่สุดต่อเนื่อง
+local function autoHoverNearestMonster()
     local hrp = getHRP()
-    if not hrp or not monster or not monster:FindFirstChild("HumanoidRootPart") then return end
+    if not hrp then return end
 
-    print("[Hover] วาร์ปไปบนหัวมอน:", monster.Name)
-
-    -- สร้าง BodyPosition แทนล็อค CFrame
     local bodyPos = Instance.new("BodyPosition")
     bodyPos.MaxForce = Vector3.new(1e5,1e5,1e5)
     bodyPos.P = 1e4
     bodyPos.D = 100
-    bodyPos.Position = monster.HumanoidRootPart.Position + Vector3.new(0, 2, 0) -- ลดสูงจากหัวมอน
     bodyPos.Parent = hrp
 
     local hoverConn
     hoverConn = RunService.RenderStepped:Connect(function()
-        if monster:FindFirstChild("Humanoid") and monster.Humanoid.Health > 0 then
-            bodyPos.Position = monster.HumanoidRootPart.Position + Vector3.new(0, 2, 0)
+        local target = getNearestMonster()
+        if target then
+            bodyPos.Position = target.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
         else
-            bodyPos:Destroy()
-            hoverConn:Disconnect()
+            -- ไม่มีมอนที่เหลือ → รักษาตำแหน่งเดิม
+            bodyPos.Position = hrp.Position
         end
     end)
 end
@@ -180,22 +177,17 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- ปุ่มวาร์ป + ลอยบนหัวมอนใกล้ที่สุด
+-- ปุ่มเริ่ม Hover อัตโนมัติบนหัวมอนตัวใกล้ที่สุด
 local tpButton = Instance.new("TextButton")
 tpButton.Size = UDim2.new(0, 200, 0, 50)
 tpButton.Position = UDim2.new(0, 20, 0, 260)
 tpButton.BackgroundColor3 = Color3.fromRGB(0, 0, 170)
-tpButton.Text = "Teleport & Hover"
+tpButton.Text = "Auto Hover Nearest"
 tpButton.TextScaled = true
 tpButton.Font = Enum.Font.SourceSansBold
 tpButton.TextColor3 = Color3.new(1, 1, 1)
 tpButton.Parent = screenGui
 
 tpButton.MouseButton1Click:Connect(function()
-    local target = getNearestMonster()
-    if target then
-        hoverOnMonster(target)
-    else
-        print("[Hover] ไม่เจอมอนที่มี ESP ใกล้ที่สุด")
-    end
+    autoHoverNearestMonster()
 end)
