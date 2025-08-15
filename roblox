@@ -1,4 +1,4 @@
--- Dungeon Lootify Monster ESP + Movement Detection + GUI Control
+-- Dungeon Lootify All-in-One ESP + Movement + Hover GUI
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -6,39 +6,15 @@ local LocalPlayer = Players.LocalPlayer
 local lastPositions = {}
 local scanInterval = 2
 local monsters = {}
-local espEnabled = true -- เริ่มเปิด ESP
+local espEnabled = true
 
--- UI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "MonsterESP_GUI"
-screenGui.Parent = game.CoreGui
-
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 150, 0, 50)
-toggleButton.Position = UDim2.new(0, 20, 0, 200)
-toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-toggleButton.Text = "ESP: ON"
-toggleButton.TextScaled = true
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.TextColor3 = Color3.new(1, 1, 1)
-toggleButton.Parent = screenGui
-
-toggleButton.MouseButton1Click:Connect(function()
-    espEnabled = not espEnabled
-    if espEnabled then
-        toggleButton.Text = "ESP: ON"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-    else
-        toggleButton.Text = "ESP: OFF"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
-        -- ลบ ESP ทั้งหมดออก
-        for _, mob in ipairs(monsters) do
-            if mob:FindFirstChild("MonsterESP") then
-                mob.MonsterESP:Destroy()
-            end
-        end
+-- หา HRP ของผู้เล่น
+local function getHRP()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return LocalPlayer.Character.HumanoidRootPart
     end
-end)
+    return nil
+end
 
 -- ฟังก์ชันสร้าง ESP
 local function createESP(monster)
@@ -114,5 +90,103 @@ RunService.RenderStepped:Connect(function()
 
             lastPositions[mob] = currentPos
         end
+    end
+end)
+
+-- ฟังก์ชันหา ESP ของมอนที่ใกล้ที่สุด
+local function getNearestMonster()
+    local nearest, nearestDist = nil, math.huge
+    local hrp = getHRP()
+    if not hrp then return nil end
+
+    for _, mob in ipairs(monsters) do
+        if mob and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") then
+            if mob:FindFirstChild("MonsterESP") then
+                local dist = (mob.HumanoidRootPart.Position - hrp.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearest = mob
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+-- ฟังก์ชันวาร์ปและลอยค้างบนหัวมอน
+local function hoverOnMonster(monster)
+    local hrp = getHRP()
+    if not hrp or not monster or not monster:FindFirstChild("HumanoidRootPart") then return end
+
+    print("[Hover] วาร์ปไปบนหัวมอน:", monster.Name)
+
+    -- วาร์ปไปบนหัว
+    hrp.CFrame = monster.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0)
+
+    -- ลอยค้างจนมอนตาย
+    local hoverConn
+    hoverConn = RunService.RenderStepped:Connect(function()
+        if monster:FindFirstChild("Humanoid") and monster.Humanoid.Health > 0 then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            hrp.CFrame = monster.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0)
+        else
+            print("[Hover] มอนตาย หยุดลอย")
+            hoverConn:Disconnect()
+        end
+    end)
+end
+
+-- GUI
+local screenGui = Instance.new("ScreenGui", game.CoreGui)
+
+-- ปุ่มเปิด/ปิด ESP
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 150, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0, 200)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+toggleButton.Text = "ESP: ON"
+toggleButton.TextScaled = true
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextColor3 = Color3.new(1, 1, 1)
+toggleButton.Parent = screenGui
+
+toggleButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        toggleButton.Text = "ESP: ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+        -- รีสร้าง ESP
+        for _, mob in ipairs(monsters) do
+            createESP(mob)
+        end
+    else
+        toggleButton.Text = "ESP: OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+        -- ลบ ESP ทั้งหมด
+        for _, mob in ipairs(monsters) do
+            if mob:FindFirstChild("MonsterESP") then
+                mob.MonsterESP:Destroy()
+            end
+        end
+    end
+end)
+
+-- ปุ่มวาร์ป + ลอยบนหัวมอนใกล้ที่สุด
+local tpButton = Instance.new("TextButton")
+tpButton.Size = UDim2.new(0, 200, 0, 50)
+tpButton.Position = UDim2.new(0, 20, 0, 260)
+tpButton.BackgroundColor3 = Color3.fromRGB(0, 0, 170)
+tpButton.Text = "Teleport & Hover"
+tpButton.TextScaled = true
+tpButton.Font = Enum.Font.SourceSansBold
+tpButton.TextColor3 = Color3.new(1, 1, 1)
+tpButton.Parent = screenGui
+
+tpButton.MouseButton1Click:Connect(function()
+    local target = getNearestMonster()
+    if target then
+        hoverOnMonster(target)
+    else
+        print("[Hover] ไม่เจอมอนที่มี ESP ใกล้ที่สุด")
     end
 end)
