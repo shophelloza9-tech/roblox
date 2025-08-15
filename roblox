@@ -1,220 +1,118 @@
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
+-- Dungeon Lootify Monster ESP + Movement Detection + GUI Control
 local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
--- Re-get character on respawn
-player.CharacterAdded:Connect(function(char)
-	character = char
-	humanoid = char:WaitForChild("Humanoid")
-end)
+local lastPositions = {}
+local scanInterval = 2
+local monsters = {}
+local espEnabled = true -- เริ่มเปิด ESP
 
--- Settings
-local offset = Vector3.new(0, 0, -5)
-local maxDistance = 80
-local speedEnabled = false
-local isHealing = false
-
--- Utility: Check if model is NPC
-local function isNPC(model)
-	if not model:IsA("Model") then return false end
-	if Players:GetPlayerFromCharacter(model) then return false end
-	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
-end
-
--- Find nearest usable seat
-local function findNearestSeat()
-	local char = player.Character
-	if not char then return nil end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return nil end
-
-	local nearest = nil
-	local shortestDist = math.huge
-
-	for _, seat in ipairs(workspace:GetDescendants()) do
-		if seat:IsA("Seat") and not seat.Disabled then
-			local dist = (seat.Position - hrp.Position).Magnitude
-			if dist < shortestDist then
-				shortestDist = dist
-				nearest = seat
-			end
-		end
-	end
-	return nearest
-end
-
--- Teleport Nearby NPCs
-local function teleportNearbyNPCs()
-	local char = player.Character
-	if not char then return end
-
-	local myHRP = char:FindFirstChild("HumanoidRootPart")
-	if not myHRP then return end
-
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
-			local npc = obj.Parent
-			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
-				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
-			end
-		end
-	end
-end
-
--- Heal Player
-local function healPlayer()
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	local humanoid = char:FindFirstChild("Humanoid")
-	if not hrp or not humanoid then return end
-
-	local seat = findNearestSeat()
-	if not seat then
-		warn("No usable seat found!")
-		return
-	end
-
-	local originalCFrame = hrp.CFrame
-	local wasAnchored = seat.Anchored
-	seat.Anchored = true
-
-	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
-
-	-- Wait until full HP via GUI
-	while true do
-		task.wait(1)
-		local hpLabel = player:FindFirstChild("PlayerGui")
-			and player.PlayerGui:FindFirstChild("Main")
-			and player.PlayerGui.Main:FindFirstChild("HomePage")
-			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
-			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
-			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-
-		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text
-			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current) == tonumber(max) then
-				break
-			end
-		else
-			warn("HP label not found!")
-			break
-		end
-	end
-
-	humanoid.Sit = false
-	task.wait(0.1)
-	hrp.CFrame = originalCFrame
-	seat.Anchored = wasAnchored
-end
-
--- UI creation
+-- UI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "OneClickTeleportGUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.Name = "MonsterESP_GUI"
+screenGui.Parent = game.CoreGui
 
--- Exit Button
-local exitButton = Instance.new("TextButton")
-exitButton.Size = UDim2.new(0, 150, 0, 50)
-exitButton.Position = UDim2.new(0, 10, 0, 10)
-exitButton.Text = "Exit"
-exitButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-exitButton.TextColor3 = Color3.new(1, 1, 1)
-exitButton.Font = Enum.Font.SourceSansBold
-exitButton.TextSize = 20
-exitButton.Parent = screenGui
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 150, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0, 200)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+toggleButton.Text = "ESP: ON"
+toggleButton.TextScaled = true
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextColor3 = Color3.new(1, 1, 1)
+toggleButton.Parent = screenGui
 
--- Teleport NPCs Button
-local teleportButton = Instance.new("TextButton")
-teleportButton.Size = UDim2.new(0, 150, 0, 50)
-teleportButton.Position = UDim2.new(0, 10, 0, 70)
-teleportButton.Text = "Bring Enemies (R)"
-teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
-teleportButton.TextColor3 = Color3.new(1, 1, 1)
-teleportButton.Font = Enum.Font.SourceSansBold
-teleportButton.TextSize = 20
-teleportButton.Parent = screenGui
+toggleButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        toggleButton.Text = "ESP: ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    else
+        toggleButton.Text = "ESP: OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+        -- ลบ ESP ทั้งหมดออก
+        for _, mob in ipairs(monsters) do
+            if mob:FindFirstChild("MonsterESP") then
+                mob.MonsterESP:Destroy()
+            end
+        end
+    end
+end)
 
--- Heal Button
-local healButton = Instance.new("TextButton")
-healButton.Size = UDim2.new(0, 150, 0, 50)
-healButton.Position = UDim2.new(0, 10, 0, 130)
-healButton.Text = "Heal (F)"
-healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
-healButton.TextColor3 = Color3.new(1, 1, 1)
-healButton.Font = Enum.Font.SourceSansBold
-healButton.TextSize = 20
-healButton.Parent = screenGui
+-- ฟังก์ชันสร้าง ESP
+local function createESP(monster)
+    if monster:FindFirstChild("HumanoidRootPart") and not monster:FindFirstChild("MonsterESP") then
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "MonsterESP"
+        billboard.Adornee = monster.HumanoidRootPart
+        billboard.Size = UDim2.new(0, 200, 0, 50)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
 
--- Speed Toggle Button
-local speedButton = Instance.new("TextButton")
-speedButton.Size = UDim2.new(0, 150, 0, 50)
-speedButton.Position = UDim2.new(0, 10, 0, 190)
-speedButton.Text = "Speed (G): OFF"
-speedButton.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-speedButton.TextColor3 = Color3.new(0, 0, 0)
-speedButton.Font = Enum.Font.SourceSansBold
-speedButton.TextSize = 20
-speedButton.Parent = screenGui
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = "[Monster] " .. monster.Name
+        label.TextColor3 = Color3.fromRGB(255, 255, 0)
+        label.TextStrokeTransparency = 0
+        label.Font = Enum.Font.SourceSansBold
+        label.TextScaled = true
+        label.Name = "ESPLabel"
+        label.Parent = billboard
 
--- Button connections
-teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
-healButton.MouseButton1Click:Connect(healPlayer)
-
-local function toggleSpeed()
-	speedEnabled = not speedEnabled
-	speedButton.Text = "Speed (G): " .. (speedEnabled and "ON" or "OFF")
-	if not speedEnabled and humanoid then
-		humanoid.WalkSpeed = 16
-	end
+        billboard.Parent = monster
+    end
 end
 
-speedButton.MouseButton1Click:Connect(toggleSpeed)
-exitButton.MouseButton1Click:Connect(function()
-	screenGui:Destroy()
+-- ฟังก์ชันสแกนหาโมเดลมอน
+local function scanMonsters()
+    monsters = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Humanoid") and obj.Parent:IsA("Model") then
+            local model = obj.Parent
+            if model:FindFirstChild("HumanoidRootPart") then
+                table.insert(monsters, model)
+                if espEnabled then
+                    createESP(model)
+                end
+            end
+        end
+    end
+    print("[Scan] เจอมอน:", #monsters)
+end
+
+-- สแกนครั้งแรก
+scanMonsters()
+
+-- สแกนอัตโนมัติ
+task.spawn(function()
+    while true do
+        task.wait(scanInterval)
+        scanMonsters()
+    end
 end)
 
--- Hotkeys
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.R then
-		teleportNearbyNPCs()
-	elseif input.KeyCode == Enum.KeyCode.F then
-		healPlayer()
-	elseif input.KeyCode == Enum.KeyCode.G then
-		toggleSpeed()
-	end
-end)
+-- ตรวจจับการเคลื่อนไหว + เปลี่ยนสี ESP
+RunService.RenderStepped:Connect(function()
+    if not espEnabled then return end
+    for _, mob in ipairs(monsters) do
+        if mob and mob:FindFirstChild("HumanoidRootPart") then
+            local hrp = mob.HumanoidRootPart
+            local lastPos = lastPositions[mob] or hrp.Position
+            local currentPos = hrp.Position
+            local moving = (currentPos - lastPos).Magnitude > 0.1
 
--- Infinite jump
-UserInputService.JumpRequest:Connect(function()
-	if humanoid then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	end
-end)
+            local espGui = mob:FindFirstChild("MonsterESP")
+            if espGui and espGui:FindFirstChild("ESPLabel") then
+                if moving then
+                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- แดง (กำลังขยับ)
+                else
+                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 255, 0) -- เหลือง (หยุดนิ่ง)
+                end
+            end
 
--- LoopSpeed
-RunService.Stepped:Connect(function()
-	if speedEnabled and humanoid then
-		humanoid.WalkSpeed = 60
-	end
-end)
-
--- Auto Heal when HP < 30%
-RunService.Heartbeat:Connect(function()
-	if not humanoid or humanoid.Health <= 0 then return end
-	if isHealing then return end
-
-	if humanoid.Health / humanoid.MaxHealth <= 0.3 then
-		isHealing = true
-		healPlayer()
-		isHealing = false
-	end
+            lastPositions[mob] = currentPos
+        end
+    end
 end)
