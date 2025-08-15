@@ -1,4 +1,4 @@
--- Dungeon Lootify All-in-One ESP + Hover GUI (No Hitbox)
+-- Dungeon Lootify All-in-One ESP + Hover + Mana Lock GUI
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -7,6 +7,15 @@ local lastPositions = {}
 local scanInterval = 2
 local monsters = {}
 local espEnabled = true
+
+-- Hover Variables
+local hoverConn = nil
+local bodyPos = nil
+local isHovering = false
+
+-- Mana Variables
+local manaName = nil
+local manaValue = nil
 
 -- หา HRP ของผู้เล่น
 local function getHRP()
@@ -55,11 +64,7 @@ local function scanMonsters()
             end
         end
     end
-    print("[Scan] เจอมอน (ไม่รวมตัวผู้เล่น):", #monsters)
 end
-
--- สแกนครั้งแรก
-scanMonsters()
 
 -- สแกนอัตโนมัติ
 task.spawn(function()
@@ -113,17 +118,11 @@ local function getNearestMonster()
     return nearest
 end
 
--- Hover Variables
-local hoverConn = nil
-local bodyPos = nil
-local isHovering = false
-
 -- ฟังก์ชัน Auto Hover
 local function autoHoverNearestMonster()
     local hrp = getHRP()
     if not hrp then return end
 
-    -- ถ้ามี hover อยู่แล้ว ให้หยุดก่อน
     if bodyPos then bodyPos:Destroy() end
     if hoverConn then hoverConn:Disconnect() end
 
@@ -158,6 +157,58 @@ local function stopHover()
         bodyPos = nil
     end
 end
+
+-- สแกนหา Mana อัตโนมัติ
+local function scanMana()
+    -- ตรวจ NumberValue / IntValue ใน Player และ Character
+    for _, obj in ipairs(LocalPlayer:GetChildren()) do
+        if (obj:IsA("NumberValue") or obj:IsA("IntValue")) and string.match(obj.Name:lower(), "mana") then
+            manaName = obj.Name
+            manaValue = obj
+            return
+        end
+    end
+    if LocalPlayer.Character then
+        for _, obj in ipairs(LocalPlayer.Character:GetChildren()) do
+            if (obj:IsA("NumberValue") or obj:IsA("IntValue")) and string.match(obj.Name:lower(), "mana") then
+                manaName = obj.Name
+                manaValue = obj
+                return
+            end
+        end
+        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            for _, attrName in ipairs(humanoid:GetAttributes()) do
+                if string.match(attrName:lower(), "mana") then
+                    manaName = attrName
+                    manaValue = humanoid
+                    return
+                end
+            end
+        end
+    end
+end
+
+-- ฟังก์ชันล็อก Mana ไม่ให้ลด
+local function lockMana()
+    if not manaName or not manaValue then return end
+    RunService.RenderStepped:Connect(function()
+        if manaValue:IsA("NumberValue") or manaValue:IsA("IntValue") then
+            manaValue.Value = manaValue.Value -- ตั้งค่าเท่าเดิม
+        elseif manaValue:IsA("Humanoid") then
+            manaValue:SetAttribute(manaName, manaValue:GetAttribute(manaName))
+        end
+    end)
+end
+
+-- สแกน Mana ทุก 2 วินาที
+task.spawn(function()
+    while true do
+        task.wait(2)
+        scanMana()
+        lockMana()
+    end
+end)
 
 -- GUI
 local screenGui = Instance.new("ScreenGui", game.CoreGui)
@@ -220,4 +271,26 @@ stopButton.Parent = screenGui
 
 stopButton.MouseButton1Click:Connect(function()
     stopHover()
+end)
+
+-- ปุ่มโชว์ค่า Mana แบบเรียลไทม์
+local manaLabel = Instance.new("TextLabel")
+manaLabel.Size = UDim2.new(0, 150, 0, 50)
+manaLabel.Position = UDim2.new(0, 20, 0, 140)
+manaLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+manaLabel.BackgroundTransparency = 0.5
+manaLabel.Text = "Mana: 0"
+manaLabel.TextScaled = true
+manaLabel.Font = Enum.Font.SourceSansBold
+manaLabel.TextColor3 = Color3.new(0, 1, 1)
+manaLabel.Parent = screenGui
+
+RunService.RenderStepped:Connect(function()
+    if manaValue then
+        if manaValue:IsA("NumberValue") or manaValue:IsA("IntValue") then
+            manaLabel.Text = "Mana: "..manaValue.Value
+        elseif manaValue:IsA("Humanoid") then
+            manaLabel.Text = "Mana: "..(manaValue:GetAttribute(manaName) or 0)
+        end
+    end
 end)
