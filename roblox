@@ -1,296 +1,62 @@
--- Dungeon Lootify All-in-One ESP + Hover + Mana Lock GUI
-local RunService = game:GetService("RunService")
+-- ตัวอย่าง Hook RemoteEvent / RemoteFunction เพื่อดูและแก้ค่า HP/MP
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local lastPositions = {}
-local scanInterval = 2
-local monsters = {}
-local espEnabled = true
+-- ฟังก์ชัน Hook FireServer ของ RemoteEvent
+local function hookRemoteEvent(remote)
+    if not remote:IsA("RemoteEvent") then return end
 
--- Hover Variables
-local hoverConn = nil
-local bodyPos = nil
-local isHovering = false
+    local oldFireServer = remote.FireServer
+    remote.FireServer = function(self, ...)
+        local args = {...}
 
--- Mana Variables
-local manaName = nil
-local manaValue = nil
+        print("[RemoteEvent Hook] Name:", remote.Name)
+        print("[Arguments Before] ", unpack(args))
 
--- หา HRP ของผู้เล่น
-local function getHRP()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return LocalPlayer.Character.HumanoidRootPart
-    end
-    return nil
-end
-
--- ฟังก์ชันสร้าง ESP
-local function createESP(monster)
-    if monster:FindFirstChild("HumanoidRootPart") and not monster:FindFirstChild("MonsterESP") then
-        local billboard = Instance.new("BillboardGui")
-        billboard.Name = "MonsterESP"
-        billboard.Adornee = monster.HumanoidRootPart
-        billboard.Size = UDim2.new(0, 200, 0, 50)
-        billboard.StudsOffset = Vector3.new(0, 3, 0)
-        billboard.AlwaysOnTop = true
-
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = "[Monster] " .. monster.Name
-        label.TextColor3 = Color3.fromRGB(255, 255, 0)
-        label.TextStrokeTransparency = 0
-        label.Font = Enum.Font.SourceSansBold
-        label.TextScaled = true
-        label.Name = "ESPLabel"
-        label.Parent = billboard
-
-        billboard.Parent = monster
-    end
-end
-
--- ฟังก์ชันสแกนหาโมเดลมอน (ไม่รวมตัวผู้เล่น)
-local function scanMonsters()
-    monsters = {}
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Humanoid") and obj.Parent:IsA("Model") then
-            local model = obj.Parent
-            if model ~= LocalPlayer.Character and model:FindFirstChild("HumanoidRootPart") then
-                table.insert(monsters, model)
-                if espEnabled then
-                    createESP(model)
-                end
+        -- ตัวอย่างแก้ค่า HP/MP หากเจอใน Arguments
+        for i, v in ipairs(args) do
+            if type(v) == "number" then
+                -- สมมติเรารู้ว่า index นี้คือ HP/MP
+                args[i] = math.huge -- ตั้งค่าเป็นจำนวนสูงสุด
             end
         end
+
+        print("[Arguments After] ", unpack(args))
+        return oldFireServer(self, unpack(args))
     end
 end
 
--- สแกนอัตโนมัติ
-task.spawn(function()
-    while true do
-        task.wait(scanInterval)
-        scanMonsters()
-    end
-end)
+-- ฟังก์ชัน Hook InvokeServer ของ RemoteFunction
+local function hookRemoteFunction(remote)
+    if not remote:IsA("RemoteFunction") then return end
 
--- ตรวจจับการเคลื่อนไหว + เปลี่ยนสี ESP
-RunService.RenderStepped:Connect(function()
-    if not espEnabled then return end
-    for _, mob in ipairs(monsters) do
-        if mob and mob:FindFirstChild("HumanoidRootPart") then
-            local hrp = mob.HumanoidRootPart
-            local lastPos = lastPositions[mob] or hrp.Position
-            local currentPos = hrp.Position
-            local moving = (currentPos - lastPos).Magnitude > 0.1
+    local oldInvoke = remote.InvokeServer
+    remote.InvokeServer = function(self, ...)
+        local args = {...}
+        print("[RemoteFunction Hook] Name:", remote.Name)
+        print("[Arguments Before] ", unpack(args))
 
-            local espGui = mob:FindFirstChild("MonsterESP")
-            if espGui and espGui:FindFirstChild("ESPLabel") then
-                if moving then
-                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- แดง (กำลังขยับ)
-                else
-                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 255, 0) -- เหลือง (หยุดนิ่ง)
-                end
-            end
-
-            lastPositions[mob] = currentPos
-        end
-    end
-end)
-
--- ฟังก์ชันหา ESP ของมอนที่ใกล้ที่สุด
-local function getNearestMonster()
-    local nearest, nearestDist = nil, math.huge
-    local hrp = getHRP()
-    if not hrp then return nil end
-
-    for _, mob in ipairs(monsters) do
-        if mob and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") then
-            if mob:FindFirstChild("MonsterESP") and mob.Humanoid.Health > 0 then
-                local dist = (mob.HumanoidRootPart.Position - hrp.Position).Magnitude
-                if dist < nearestDist then
-                    nearestDist = dist
-                    nearest = mob
-                end
+        -- แก้ค่า HP/MP เช่นเดียวกับ RemoteEvent
+        for i, v in ipairs(args) do
+            if type(v) == "number" then
+                args[i] = math.huge
             end
         end
-    end
-    return nearest
-end
 
--- ฟังก์ชัน Auto Hover
-local function autoHoverNearestMonster()
-    local hrp = getHRP()
-    if not hrp then return end
-
-    if bodyPos then bodyPos:Destroy() end
-    if hoverConn then hoverConn:Disconnect() end
-
-    bodyPos = Instance.new("BodyPosition")
-    bodyPos.MaxForce = Vector3.new(1e5,1e5,1e5)
-    bodyPos.P = 1e4
-    bodyPos.D = 100
-    bodyPos.Parent = hrp
-
-    isHovering = true
-
-    hoverConn = RunService.RenderStepped:Connect(function()
-        if not isHovering then return end
-        local target = getNearestMonster()
-        if target then
-            bodyPos.Position = target.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
-        else
-            bodyPos.Position = hrp.Position
-        end
-    end)
-end
-
--- ฟังก์ชัน Stop Hover
-local function stopHover()
-    isHovering = false
-    if hoverConn then
-        hoverConn:Disconnect()
-        hoverConn = nil
-    end
-    if bodyPos then
-        bodyPos:Destroy()
-        bodyPos = nil
+        print("[Arguments After] ", unpack(args))
+        return oldInvoke(self, unpack(args))
     end
 end
 
--- สแกนหา Mana อัตโนมัติ
-local function scanMana()
-    -- ตรวจ NumberValue / IntValue ใน Player และ Character
-    for _, obj in ipairs(LocalPlayer:GetChildren()) do
-        if (obj:IsA("NumberValue") or obj:IsA("IntValue")) and string.match(obj.Name:lower(), "mana") then
-            manaName = obj.Name
-            manaValue = obj
-            return
-        end
-    end
-    if LocalPlayer.Character then
-        for _, obj in ipairs(LocalPlayer.Character:GetChildren()) do
-            if (obj:IsA("NumberValue") or obj:IsA("IntValue")) and string.match(obj.Name:lower(), "mana") then
-                manaName = obj.Name
-                manaValue = obj
-                return
-            end
-        end
-        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
-        if humanoid then
-            for _, attrName in ipairs(humanoid:GetAttributes()) do
-                if string.match(attrName:lower(), "mana") then
-                    manaName = attrName
-                    manaValue = humanoid
-                    return
-                end
-            end
-        end
-    end
+-- สแกน Remote ทั้งหมดใน ReplicatedStorage
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+    hookRemoteEvent(obj)
+    hookRemoteFunction(obj)
 end
 
--- ฟังก์ชันล็อก Mana ไม่ให้ลด
-local function lockMana()
-    if not manaName or not manaValue then return end
-    RunService.RenderStepped:Connect(function()
-        if manaValue:IsA("NumberValue") or manaValue:IsA("IntValue") then
-            manaValue.Value = manaValue.Value -- ตั้งค่าเท่าเดิม
-        elseif manaValue:IsA("Humanoid") then
-            manaValue:SetAttribute(manaName, manaValue:GetAttribute(manaName))
-        end
-    end)
-end
-
--- สแกน Mana ทุก 2 วินาที
-task.spawn(function()
-    while true do
-        task.wait(2)
-        scanMana()
-        lockMana()
-    end
-end)
-
--- GUI
-local screenGui = Instance.new("ScreenGui", game.CoreGui)
-
--- ปุ่มเปิด/ปิด ESP
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 150, 0, 50)
-toggleButton.Position = UDim2.new(0, 20, 0, 200)
-toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-toggleButton.Text = "ESP: ON"
-toggleButton.TextScaled = true
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.TextColor3 = Color3.new(1, 1, 1)
-toggleButton.Parent = screenGui
-
-toggleButton.MouseButton1Click:Connect(function()
-    espEnabled = not espEnabled
-    if espEnabled then
-        toggleButton.Text = "ESP: ON"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-        for _, mob in ipairs(monsters) do
-            createESP(mob)
-        end
-    else
-        toggleButton.Text = "ESP: OFF"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
-        for _, mob in ipairs(monsters) do
-            if mob:FindFirstChild("MonsterESP") then
-                mob.MonsterESP:Destroy()
-            end
-        end
-    end
-end)
-
--- ปุ่มเริ่ม Hover อัตโนมัติ
-local tpButton = Instance.new("TextButton")
-tpButton.Size = UDim2.new(0, 200, 0, 50)
-tpButton.Position = UDim2.new(0, 20, 0, 260)
-tpButton.BackgroundColor3 = Color3.fromRGB(0, 0, 170)
-tpButton.Text = "Auto Hover Nearest"
-tpButton.TextScaled = true
-tpButton.Font = Enum.Font.SourceSansBold
-tpButton.TextColor3 = Color3.new(1, 1, 1)
-tpButton.Parent = screenGui
-
-tpButton.MouseButton1Click:Connect(function()
-    autoHoverNearestMonster()
-end)
-
--- ปุ่มหยุด Hover
-local stopButton = Instance.new("TextButton")
-stopButton.Size = UDim2.new(0, 150, 0, 50)
-stopButton.Position = UDim2.new(0, 20, 0, 320)
-stopButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
-stopButton.Text = "Stop Hover"
-stopButton.TextScaled = true
-stopButton.Font = Enum.Font.SourceSansBold
-stopButton.TextColor3 = Color3.new(1, 1, 1)
-stopButton.Parent = screenGui
-
-stopButton.MouseButton1Click:Connect(function()
-    stopHover()
-end)
-
--- ปุ่มโชว์ค่า Mana แบบเรียลไทม์
-local manaLabel = Instance.new("TextLabel")
-manaLabel.Size = UDim2.new(0, 150, 0, 50)
-manaLabel.Position = UDim2.new(0, 20, 0, 140)
-manaLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-manaLabel.BackgroundTransparency = 0.5
-manaLabel.Text = "Mana: 0"
-manaLabel.TextScaled = true
-manaLabel.Font = Enum.Font.SourceSansBold
-manaLabel.TextColor3 = Color3.new(0, 1, 1)
-manaLabel.Parent = screenGui
-
-RunService.RenderStepped:Connect(function()
-    if manaValue then
-        if manaValue:IsA("NumberValue") or manaValue:IsA("IntValue") then
-            manaLabel.Text = "Mana: "..manaValue.Value
-        elseif manaValue:IsA("Humanoid") then
-            manaLabel.Text = "Mana: "..(manaValue:GetAttribute(manaName) or 0)
-        end
-    end
+-- สำหรับ Remote ที่สร้างใหม่ภายหลัง สามารถใช้ DescendantAdded
+ReplicatedStorage.DescendantAdded:Connect(function(obj)
+    hookRemoteEvent(obj)
+    hookRemoteFunction(obj)
 end)
