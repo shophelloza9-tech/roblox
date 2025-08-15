@@ -1,4 +1,4 @@
--- Dungeon Lootify All-in-One ESP + Movement + Hover GUI (ไม่รวมตัวผู้เล่น)
+-- Dungeon Lootify All-in-One ESP + Hover + Hitbox GUI
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -49,9 +49,17 @@ local function scanMonsters()
             local model = obj.Parent
             if model ~= LocalPlayer.Character and model:FindFirstChild("HumanoidRootPart") then
                 table.insert(monsters, model)
+
+                -- สร้าง ESP
                 if espEnabled then
                     createESP(model)
                 end
+
+                -- ขยาย Hitbox
+                local hrp = model.HumanoidRootPart
+                hrp.Size = Vector3.new(6, 6, 6)
+                hrp.Transparency = 0.5
+                hrp.CanCollide = false
             end
         end
     end
@@ -113,24 +121,27 @@ local function getNearestMonster()
     return nearest
 end
 
--- ฟังก์ชันวาร์ปและลอยค้างบนหัวมอน
+-- ฟังก์ชันวาร์ปและลอยบนหัวมอนด้วย BodyPosition
 local function hoverOnMonster(monster)
     local hrp = getHRP()
     if not hrp or not monster or not monster:FindFirstChild("HumanoidRootPart") then return end
 
     print("[Hover] วาร์ปไปบนหัวมอน:", monster.Name)
 
-    -- วาร์ปไปบนหัว
-    hrp.CFrame = monster.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0)
+    -- สร้าง BodyPosition แทนล็อค CFrame
+    local bodyPos = Instance.new("BodyPosition")
+    bodyPos.MaxForce = Vector3.new(1e5,1e5,1e5)
+    bodyPos.P = 1e4
+    bodyPos.D = 100
+    bodyPos.Position = monster.HumanoidRootPart.Position + Vector3.new(0, 2, 0) -- ลดสูงจากหัวมอน
+    bodyPos.Parent = hrp
 
-    -- ลอยค้างจนมอนตาย
     local hoverConn
     hoverConn = RunService.RenderStepped:Connect(function()
         if monster:FindFirstChild("Humanoid") and monster.Humanoid.Health > 0 then
-            hrp.Velocity = Vector3.new(0, 0, 0)
-            hrp.CFrame = monster.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0)
+            bodyPos.Position = monster.HumanoidRootPart.Position + Vector3.new(0, 2, 0)
         else
-            print("[Hover] มอนตาย หยุดลอย")
+            bodyPos:Destroy()
             hoverConn:Disconnect()
         end
     end)
@@ -155,14 +166,12 @@ toggleButton.MouseButton1Click:Connect(function()
     if espEnabled then
         toggleButton.Text = "ESP: ON"
         toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-        -- รีสร้าง ESP
         for _, mob in ipairs(monsters) do
             createESP(mob)
         end
     else
         toggleButton.Text = "ESP: OFF"
         toggleButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
-        -- ลบ ESP ทั้งหมด
         for _, mob in ipairs(monsters) do
             if mob:FindFirstChild("MonsterESP") then
                 mob.MonsterESP:Destroy()
