@@ -1,4 +1,4 @@
--- Dungeon Lootify All-in-One ESP + Movement + Hover GUI
+-- Dungeon Lootify All-in-One ESP + Movement + Hover GUI (ไม่รวมตัวผู้เล่น)
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -41,13 +41,13 @@ local function createESP(monster)
     end
 end
 
--- ฟังก์ชันสแกนหาโมเดลมอน
+-- ฟังก์ชันสแกนหาโมเดลมอน (ไม่รวมตัวผู้เล่น)
 local function scanMonsters()
     monsters = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Humanoid") and obj.Parent:IsA("Model") then
             local model = obj.Parent
-            if model:FindFirstChild("HumanoidRootPart") then
+            if model ~= LocalPlayer.Character and model:FindFirstChild("HumanoidRootPart") then
                 table.insert(monsters, model)
                 if espEnabled then
                     createESP(model)
@@ -55,7 +55,7 @@ local function scanMonsters()
             end
         end
     end
-    print("[Scan] เจอมอน:", #monsters)
+    print("[Scan] เจอมอน (ไม่รวมตัวผู้เล่น):", #monsters)
 end
 
 -- สแกนครั้งแรก
