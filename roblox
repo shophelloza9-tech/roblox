@@ -1,4 +1,4 @@
--- Dungeon Lootify All-in-One ESP + Hover GUI (No Hitbox)
+-- Dungeon Lootify All-in-One ESP + Hover GUI (No Hitbox + Heal)
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -7,6 +7,7 @@ local lastPositions = {}
 local scanInterval = 2
 local monsters = {}
 local espEnabled = true
+local isHealing = false -- 📌 ตัวแปรสถานะ Healing
 
 -- หา HRP ของผู้เล่น
 local function getHRP()
@@ -18,6 +19,7 @@ end
 
 -- ฟังก์ชันสร้าง ESP
 local function createESP(monster)
+    if isHealing then return end -- 📌 หยุดถ้ากำลัง Heal
     if monster:FindFirstChild("HumanoidRootPart") and not monster:FindFirstChild("MonsterESP") then
         local billboard = Instance.new("BillboardGui")
         billboard.Name = "MonsterESP"
@@ -43,6 +45,7 @@ end
 
 -- ฟังก์ชันสแกนหาโมเดลมอน (ไม่รวมตัวผู้เล่น)
 local function scanMonsters()
+    if isHealing then return end -- 📌 หยุดสแกนตอน Heal
     monsters = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Humanoid") and obj.Parent:IsA("Model") then
@@ -55,23 +58,21 @@ local function scanMonsters()
             end
         end
     end
-    print("[Scan] เจอมอน (ไม่รวมตัวผู้เล่น):", #monsters)
 end
-
--- สแกนครั้งแรก
-scanMonsters()
 
 -- สแกนอัตโนมัติ
 task.spawn(function()
     while true do
         task.wait(scanInterval)
-        scanMonsters()
+        if not isHealing then
+            scanMonsters()
+        end
     end
 end)
 
 -- ตรวจจับการเคลื่อนไหว + เปลี่ยนสี ESP
 RunService.RenderStepped:Connect(function()
-    if not espEnabled then return end
+    if not espEnabled or isHealing then return end
     for _, mob in ipairs(monsters) do
         if mob and mob:FindFirstChild("HumanoidRootPart") then
             local hrp = mob.HumanoidRootPart
@@ -82,9 +83,9 @@ RunService.RenderStepped:Connect(function()
             local espGui = mob:FindFirstChild("MonsterESP")
             if espGui and espGui:FindFirstChild("ESPLabel") then
                 if moving then
-                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- แดง (กำลังขยับ)
+                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
                 else
-                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 255, 0) -- เหลือง (หยุดนิ่ง)
+                    espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
                 end
             end
 
@@ -95,6 +96,7 @@ end)
 
 -- ฟังก์ชันหา ESP ของมอนที่ใกล้ที่สุด
 local function getNearestMonster()
+    if isHealing then return nil end
     local nearest, nearestDist = nil, math.huge
     local hrp = getHRP()
     if not hrp then return nil end
@@ -120,10 +122,10 @@ local isHovering = false
 
 -- ฟังก์ชัน Auto Hover
 local function autoHoverNearestMonster()
+    if isHealing then return end
     local hrp = getHRP()
     if not hrp then return end
 
-    -- ถ้ามี hover อยู่แล้ว ให้หยุดก่อน
     if bodyPos then bodyPos:Destroy() end
     if hoverConn then hoverConn:Disconnect() end
 
@@ -136,7 +138,7 @@ local function autoHoverNearestMonster()
     isHovering = true
 
     hoverConn = RunService.RenderStepped:Connect(function()
-        if not isHovering then return end
+        if not isHovering or isHealing then return end
         local target = getNearestMonster()
         if target then
             bodyPos.Position = target.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
@@ -159,6 +161,64 @@ local function stopHover()
     end
 end
 
+-- ==================================================
+-- 📌 Heal System
+local function findNearestSeat()
+    local nearest = nil
+    local shortest = math.huge
+    local hrp = getHRP()
+    if not hrp then return nil end
+
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("Seat") then
+            local dist = (hrp.Position - v.Position).Magnitude
+            if dist < shortest then
+                shortest = dist
+                nearest = v
+            end
+        end
+    end
+    return nearest
+end
+
+local function healPlayer()
+    if isHealing then return end
+    isHealing = true
+    print("💚 เริ่ม Heal... ระบบอื่นหยุดชั่วคราว")
+
+    stopHover() -- 📌 ปิด Hover ก่อน
+    local char = LocalPlayer.Character
+    if not char then isHealing = false return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not hrp or not humanoid then isHealing = false return end
+
+    local seat = findNearestSeat()
+    if not seat then
+        warn("❌ ไม่มีที่นั่ง Heal")
+        isHealing = false
+        return
+    end
+
+    local originalCFrame = hrp.CFrame
+    local wasAnchored = seat.Anchored
+    seat.Anchored = true
+    hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
+
+    -- 📌 Heal ทันทีเต็ม
+    humanoid.Health = humanoid.MaxHealth
+    task.wait(1)
+
+    humanoid.Sit = false
+    task.wait(0.1)
+    hrp.CFrame = originalCFrame
+    seat.Anchored = wasAnchored
+
+    print("✅ Heal เสร็จสิ้น ระบบอื่นกลับมาทำงาน")
+    isHealing = false
+end
+
+-- ==================================================
 -- GUI
 local screenGui = Instance.new("ScreenGui", game.CoreGui)
 
@@ -192,7 +252,7 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- ปุ่มเริ่ม Hover อัตโนมัติ
+-- ปุ่มเริ่ม Hover
 local tpButton = Instance.new("TextButton")
 tpButton.Size = UDim2.new(0, 200, 0, 50)
 tpButton.Position = UDim2.new(0, 20, 0, 260)
@@ -220,4 +280,19 @@ stopButton.Parent = screenGui
 
 stopButton.MouseButton1Click:Connect(function()
     stopHover()
+end)
+
+-- ปุ่ม Heal
+local healButton = Instance.new("TextButton")
+healButton.Size = UDim2.new(0, 150, 0, 50)
+healButton.Position = UDim2.new(0, 20, 0, 380)
+healButton.BackgroundColor3 = Color3.fromRGB(0, 170, 170)
+healButton.Text = "Heal"
+healButton.TextScaled = true
+healButton.Font = Enum.Font.SourceSansBold
+healButton.TextColor3 = Color3.new(1, 1, 1)
+healButton.Parent = screenGui
+
+healButton.MouseButton1Click:Connect(function()
+    healPlayer()
 end)
