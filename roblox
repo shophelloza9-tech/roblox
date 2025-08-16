@@ -1,233 +1,373 @@
+--======================================================
+-- All-In-One GUI + Teleport + Heal + Speed + ESP + Hover
+--======================================================
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local player = Players.LocalPlayer
+
+local LocalPlayer = Players.LocalPlayer
+local player = LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 
--- Re-get character on respawn
+--======================================================
+-- Re-get Character on Respawn
+--======================================================
 player.CharacterAdded:Connect(function(char)
-	character = char
-	humanoid = char:WaitForChild("Humanoid")
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
 end)
 
--- UI creation
+--======================================================
+-- Main ScreenGui
+--======================================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "OneClickTeleportGUI"
+screenGui.Name = "AllInOneGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Menu Button (แทน Exit เดิม)
-local menuButton = Instance.new("TextButton")
-menuButton.Name = "MenuButton"
-menuButton.Size = UDim2.new(0, 150, 0, 50)
-menuButton.Position = UDim2.new(0, 10, 0, 10)
-menuButton.Text = "Menu"
-menuButton.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
-menuButton.TextColor3 = Color3.new(1, 1, 1)
-menuButton.Font = Enum.Font.SourceSansBold
-menuButton.TextSize = 20
-menuButton.Parent = screenGui
-
--- Teleport NPCs Button
-local teleportButton = Instance.new("TextButton")
-teleportButton.Name = "TeleportButton"
-teleportButton.Size = UDim2.new(0, 150, 0, 50)
-teleportButton.Position = UDim2.new(0, 10, 0, 70)
-teleportButton.Text = "Bring Enemies (R)"
-teleportButton.BackgroundColor3 = Color3.fromRGB(0, 180, 90)
-teleportButton.TextColor3 = Color3.new(1, 1, 1)
-teleportButton.Font = Enum.Font.SourceSansBold
-teleportButton.TextSize = 20
-teleportButton.Parent = screenGui
-
--- Heal Button
-local healButton = Instance.new("TextButton")
-healButton.Name = "HealButton"
-healButton.Size = UDim2.new(0, 150, 0, 50)
-healButton.Position = UDim2.new(0, 10, 0, 130)
-healButton.Text = "Heal (F)"
-healButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
-healButton.TextColor3 = Color3.new(1, 1, 1)
-healButton.Font = Enum.Font.SourceSansBold
-healButton.TextSize = 20
-healButton.Parent = screenGui
-
--- Speed Toggle Button
-local speedButton = Instance.new("TextButton")
-speedButton.Name = "SpeedButton"
-speedButton.Size = UDim2.new(0, 150, 0, 50)
-speedButton.Position = UDim2.new(0, 10, 0, 190)
-speedButton.Text = "Speed (G): OFF"
-speedButton.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-speedButton.TextColor3 = Color3.new(0, 0, 0)
-speedButton.Font = Enum.Font.SourceSansBold
-speedButton.TextSize = 20
-speedButton.Parent = screenGui
-
+--======================================================
 -- Settings
+--======================================================
 local offset = Vector3.new(0, 0, -5)
 local maxDistance = 80
 local speedEnabled = false
-local menuOpen = true -- เริ่มต้นเมนูเปิด
+local menuOpen = true
+local isHealing = false
 
--- ปุ่มทั้งหมดที่จะ toggle
-local buttons = {teleportButton, healButton, speedButton}
-
--- ฟังก์ชัน toggle เมนู
-local function toggleMenu()
-	menuOpen = not menuOpen
-	for i, button in ipairs(buttons) do
-		local targetPos
-		if menuOpen then
-			-- เปิดเมนู → ให้เลื่อนลงตามลำดับ
-			targetPos = UDim2.new(0, 10, 0, 70 + (i - 1) * 60)
-		else
-			-- ปิดเมนู → ซ่อนปุ่มทั้งหมดไปอยู่บนปุ่ม Menu
-			targetPos = UDim2.new(0, 10, 0, 10)
-		end
-		TweenService:Create(button, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Position = targetPos
-		}):Play()
-	end
+--======================================================
+-- Button Creation Function
+--======================================================
+local function createButton(name, size, pos, text, color)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = size
+    btn.Position = pos
+    btn.Text = text
+    btn.BackgroundColor3 = color
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 20
+    btn.Parent = screenGui
+    return btn
 end
 
--- กด Menu จะ toggle
-menuButton.MouseButton1Click:Connect(toggleMenu)
+--======================================================
+-- Menu and Buttons
+--======================================================
+local menuButton = createButton("MenuButton", UDim2.new(0,150,0,50), UDim2.new(0,10,0,10),"Menu", Color3.fromRGB(50,120,200))
 
-------------------------------------------------------------------------------------
--- ที่เหลือโค้ดยังเหมือนโค้ดที่1 (ฟังก์ชัน teleport, heal, speed, hotkey ฯลฯ)
-------------------------------------------------------------------------------------
+-- Sub-buttons
+local teleportButton = createButton("TeleportButton", UDim2.new(0,150,0,50), UDim2.new(0,10,0,70), "Bring Enemies (R)", Color3.fromRGB(0,180,90))
+local healButton = createButton("HealButton", UDim2.new(0,150,0,50), UDim2.new(0,10,0,130), "Heal (F)", Color3.fromRGB(200,100,100))
+local speedButton = createButton("SpeedButton", UDim2.new(0,150,0,50), UDim2.new(0,10,0,190), "Speed (G): OFF", Color3.fromRGB(255,200,50))
+local toggleESPButton = createButton("ToggleESPButton", UDim2.new(0,150,0,50), UDim2.new(0,10,0,250), "ESP: ON", Color3.fromRGB(0,170,0))
+local hoverButton = createButton("HoverButton", UDim2.new(0,200,0,50), UDim2.new(0,10,0,310), "Auto Hover Nearest", Color3.fromRGB(0,0,170))
+local stopHoverButton = createButton("StopHoverButton", UDim2.new(0,150,0,50), UDim2.new(0,10,0,370), "Stop Hover", Color3.fromRGB(170,0,0))
 
--- Utility: Check if model is NPC
+local buttons = {teleportButton, healButton, speedButton, toggleESPButton, hoverButton, stopHoverButton}
+
+--======================================================
+-- Menu Toggle
+--======================================================
+local function updateMenuLayout()
+    local screenWidth = workspace.CurrentCamera.ViewportSize.X
+    local x, y = 10, 70
+    local maxX = screenWidth - 160
+    for i, btn in ipairs(buttons) do
+        btn.Visible = menuOpen
+        btn.Size = UDim2.new(0, btn.Size.X.Offset, 0, btn.Size.Y.Offset)
+        TweenService:Create(btn, TweenInfo.new(0.3), {Position = UDim2.new(0, x, 0, y)}):Play()
+        x = x + btn.Size.X.Offset + 10
+        if x > maxX then
+            x = 10
+            y = y + btn.Size.Y.Offset + 10
+        end
+    end
+end
+
+menuButton.MouseButton1Click:Connect(function()
+    menuOpen = not menuOpen
+    updateMenuLayout()
+end)
+
+--======================================================
+-- Utility Functions
+--======================================================
 local function isNPC(model)
-	if not model:IsA("Model") then return false end
-	if Players:GetPlayerFromCharacter(model) then return false end
-	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
+    if not model:IsA("Model") then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+    return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
 end
 
+local function getHRP()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return LocalPlayer.Character.HumanoidRootPart
+    end
+    return nil
+end
+
+--======================================================
 -- Teleport Nearby NPCs
+--======================================================
 local function teleportNearbyNPCs()
-	local char = player.Character
-	if not char then return end
-
-	local myHRP = char:FindFirstChild("HumanoidRootPart")
-	if not myHRP then return end
-
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
-			local npc = obj.Parent
-			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
-				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
-			end
-		end
-	end
+    if isHealing then return end
+    local char = player.Character
+    if not char then return end
+    local myHRP = char:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
+            local npc = obj.Parent
+            if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
+                obj.CFrame = myHRP.CFrame * CFrame.new(offset)
+            end
+        end
+    end
 end
 
--- Heal
+--======================================================
+-- Heal (นั่งเก้าอี้ที่นั่งได้เท่านั้น)
+--======================================================
 local function findNearestSeat()
-	local char = player.Character
-	if not char then return nil end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return nil end
-
-	local nearest = nil
-	local shortestDist = math.huge
-
-	for _, seat in ipairs(workspace:GetDescendants()) do
-		if seat:IsA("Seat") and not seat.Disabled then
-			local dist = (seat.Position - hrp.Position).Magnitude
-			if dist < shortestDist then
-				shortestDist = dist
-				nearest = seat
-			end
-		end
-	end
-	return nearest
+    local char = player.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local nearest, shortestDist = nil, math.huge
+    for _, seat in ipairs(workspace:GetDescendants()) do
+        if seat:IsA("Seat") and not seat.Disabled then
+            local dist = (seat.Position - hrp.Position).Magnitude
+            if dist < shortestDist then
+                shortestDist = dist
+                nearest = seat
+            end
+        end
+    end
+    return nearest
 end
 
 local function healPlayer()
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	local humanoid = char:FindFirstChild("Humanoid")
-	if not hrp or not humanoid then return end
+    if isHealing then return end
+    isHealing = true
+    local char = player.Character
+    if not char then isHealing = false return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not hrp or not humanoid then isHealing = false return end
+    local seat = findNearestSeat()
+    if not seat then isHealing = false return end
+    local originalCFrame = hrp.CFrame
+    local wasAnchored = seat.Anchored
+    seat.Anchored = true
+    hrp.CFrame = seat.CFrame + Vector3.new(0,2,0)
 
-	local seat = findNearestSeat()
-	if not seat then
-		warn("No usable seat found!")
-		return
-	end
+    while true do
+        task.wait(1)
+        local hpLabel = player:FindFirstChild("PlayerGui")
+            and player.PlayerGui:FindFirstChild("Main")
+            and player.PlayerGui.Main:FindFirstChild("HomePage")
+            and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
+            and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
+            and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
+            and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
+            and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
 
-	local originalCFrame = hrp.CFrame
-	local wasAnchored = seat.Anchored
-	seat.Anchored = true
-	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
+        if hpLabel and hpLabel:IsA("TextLabel") then
+            local text = hpLabel.Text
+            local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
+            if current and max and tonumber(current) == tonumber(max) then
+                break
+            end
+        else
+            break
+        end
+    end
 
-	while true do
-		task.wait(1)
-		local hpLabel = player:FindFirstChild("PlayerGui")
-			and player.PlayerGui:FindFirstChild("Main")
-			and player.PlayerGui.Main:FindFirstChild("HomePage")
-			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
-			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
-			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
-			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
-
-		if hpLabel and hpLabel:IsA("TextLabel") then
-			local text = hpLabel.Text
-			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
-			if current and max and tonumber(current) == tonumber(max) then
-				break
-			end
-		else
-			break
-		end
-	end
-
-	humanoid.Sit = false
-	task.wait(0.1)
-	hrp.CFrame = originalCFrame
-	seat.Anchored = wasAnchored
+    humanoid.Sit = false
+    task.wait(0.1)
+    hrp.CFrame = originalCFrame
+    seat.Anchored = wasAnchored
+    isHealing = false
 end
 
--- Infinite jump
+--======================================================
+-- Infinite Jump
+--======================================================
 UserInputService.JumpRequest:Connect(function()
-	if humanoid then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	end
+    if humanoid and not isHealing then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
 end)
 
+--======================================================
 -- Speed
+--======================================================
 RunService.Stepped:Connect(function()
-	if speedEnabled and humanoid then
-		humanoid.WalkSpeed = 60
-	end
+    if speedEnabled and humanoid and not isHealing then
+        humanoid.WalkSpeed = 60
+    end
 end)
 
 local function toggleSpeed()
-	speedEnabled = not speedEnabled
-	speedButton.Text = "Speed (G): " .. (speedEnabled and "ON" or "OFF")
-	if not speedEnabled and humanoid then
-		humanoid.WalkSpeed = 16
-	end
+    speedEnabled = not speedEnabled
+    speedButton.Text = "Speed (G): " .. (speedEnabled and "ON" or "OFF")
+    if not speedEnabled and humanoid then
+        humanoid.WalkSpeed = 16
+    end
 end
 
--- Connect buttons
+--======================================================
+-- ESP + Hover
+--======================================================
+local lastPositions = {}
+local scanInterval = 2
+local monsters = {}
+local espEnabled = true
+local hoverConn, bodyPos
+local isHovering = false
+
+local function createESP(monster)
+    if monster:FindFirstChild("HumanoidRootPart") and not monster:FindFirstChild("MonsterESP") then
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "MonsterESP"
+        billboard.Adornee = monster.HumanoidRootPart
+        billboard.Size = UDim2.new(0,200,0,50)
+        billboard.StudsOffset = Vector3.new(0,3,0)
+        billboard.AlwaysOnTop = true
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1,0,1,0)
+        label.BackgroundTransparency = 1
+        label.Text = "[Monster] "..monster.Name
+        label.TextColor3 = Color3.fromRGB(255,255,0)
+        label.TextStrokeTransparency = 0
+        label.Font = Enum.Font.SourceSansBold
+        label.TextScaled = true
+        label.Name = "ESPLabel"
+        label.Parent = billboard
+
+        billboard.Parent = monster
+    end
+end
+
+local function scanMonsters()
+    monsters = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Humanoid") and obj.Parent:IsA("Model") then
+            local model = obj.Parent
+            if model ~= LocalPlayer.Character and model:FindFirstChild("HumanoidRootPart") then
+                table.insert(monsters, model)
+                if espEnabled then createESP(model) end
+            end
+        end
+    end
+end
+
+scanMonsters()
+task.spawn(function()
+    while true do
+        task.wait(scanInterval)
+        scanMonsters()
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if not espEnabled then return end
+    for _, mob in ipairs(monsters) do
+        if mob and mob:FindFirstChild("HumanoidRootPart") then
+            local hrp = mob.HumanoidRootPart
+            local lastPos = lastPositions[mob] or hrp.Position
+            local currentPos = hrp.Position
+            local moving = (currentPos - lastPos).Magnitude > 0.1
+            local espGui = mob:FindFirstChild("MonsterESP")
+            if espGui and espGui:FindFirstChild("ESPLabel") then
+                espGui.ESPLabel.TextColor3 = moving and Color3.fromRGB(255,0,0) or Color3.fromRGB(255,255,0)
+            end
+            lastPositions[mob] = currentPos
+        end
+    end
+end)
+
+local function getNearestMonster()
+    local nearest, nearestDist = nil, math.huge
+    local hrp = getHRP()
+    if not hrp then return nil end
+    for _, mob in ipairs(monsters) do
+        if mob and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") then
+            if mob:FindFirstChild("MonsterESP") and mob.Humanoid.Health > 0 then
+                local dist = (mob.HumanoidRootPart.Position - hrp.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearest = mob
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+local function autoHoverNearestMonster()
+    if isHealing then return end
+    local hrp = getHRP()
+    if not hrp then return end
+    if bodyPos then bodyPos:Destroy() end
+    if hoverConn then hoverConn:Disconnect() end
+    bodyPos = Instance.new("BodyPosition")
+    bodyPos.MaxForce = Vector3.new(1e5,1e5,1e5)
+    bodyPos.P = 1e4
+    bodyPos.D = 100
+    bodyPos.Parent = hrp
+    isHovering = true
+    hoverConn = RunService.RenderStepped:Connect(function()
+        if not isHovering then return end
+        local target = getNearestMonster()
+        if target then
+            bodyPos.Position = target.HumanoidRootPart.Position + Vector3.new(0,5,0)
+        else
+            bodyPos.Position = hrp.Position
+        end
+    end)
+end
+
+local function stopHover()
+    isHovering = false
+    if hoverConn then hoverConn:Disconnect() hoverConn = nil end
+    if bodyPos then bodyPos:Destroy() bodyPos = nil end
+end
+
+--======================================================
+-- Button Connections
+--======================================================
 teleportButton.MouseButton1Click:Connect(teleportNearbyNPCs)
 healButton.MouseButton1Click:Connect(healPlayer)
 speedButton.MouseButton1Click:Connect(toggleSpeed)
+toggleESPButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        toggleESPButton.Text = "ESP: ON"
+        toggleESPButton.BackgroundColor3 = Color3.fromRGB(0,170,0)
+        for _, mob in ipairs(monsters) do createESP(mob) end
+    else
+        toggleESPButton.Text = "ESP: OFF"
+        toggleESPButton.BackgroundColor3 = Color3.fromRGB(170,0,0)
+        for _, mob in ipairs(monsters) do
+            if mob:FindFirstChild("MonsterESP") then mob.MonsterESP:Destroy() end
+        end
+    end
+end)
+hoverButton.MouseButton1Click:Connect(autoHoverNearestMonster)
+stopHoverButton.MouseButton1Click:Connect(stopHover)
 
+--======================================================
 -- Hotkeys
+--======================================================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.R then
-		teleportNearbyNPCs()
-	elseif input.KeyCode == Enum.KeyCode.F then
-		healPlayer()
-	elseif input.KeyCode == Enum.KeyCode.G then
-		toggleSpeed()
-	end
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.R then teleportNearbyNPCs()
+    elseif input.KeyCode == Enum.KeyCode.F then healPlayer()
+    elseif input.KeyCode == Enum.KeyCode.G then toggleSpeed()
+    end
 end)
