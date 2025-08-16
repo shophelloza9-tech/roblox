@@ -1,4 +1,418 @@
 --======================================================
+-- ALL-IN-ONE SCRIPT: GUI + Menu Grid + Heal + ESP + Hover + NoClip + Speed + Teleport + Auto Click
+--======================================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local player = LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local mouse = player:GetMouse()
+
+--======================================================
+-- [Re-get Character on Respawn]
+--======================================================
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+end)
+
+--======================================================
+-- [ScreenGui]
+--======================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AllInOneGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+--======================================================
+-- [Menu System + Grid]
+--======================================================
+local menuOpen = true
+local buttonSpacing = 10
+local buttonSize = Vector2.new(150, 50)
+local menuPadding = 10
+local buttons = {}
+
+local menuFrame = Instance.new("Frame")
+menuFrame.Size = UDim2.new(0, 10, 0, 10) -- ปรับอัตโนมัติ
+menuFrame.Position = UDim2.new(0, 10, 0, 10)
+menuFrame.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
+menuFrame.BorderSizePixel = 0
+menuFrame.Parent = screenGui
+
+local menuButton = Instance.new("TextButton")
+menuButton.Size = UDim2.new(0, buttonSize.X, 0, buttonSize.Y)
+menuButton.Position = UDim2.new(0, menuPadding, 0, menuPadding)
+menuButton.Text = "Menu"
+menuButton.Font = Enum.Font.SourceSansBold
+menuButton.TextSize = 20
+menuButton.TextColor3 = Color3.new(1, 1, 1)
+menuButton.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
+menuButton.Parent = menuFrame
+
+-- Toggle menu
+menuButton.MouseButton1Click:Connect(function()
+	menuOpen = not menuOpen
+	for _, btn in ipairs(buttons) do
+		btn.Visible = menuOpen
+	end
+end)
+
+-- Function to add buttons to menu
+local function addButton(text, color, callback, sizeX)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, sizeX or buttonSize.X, 0, buttonSize.Y)
+	btn.BackgroundColor3 = color
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 18
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Text = text
+	btn.Parent = menuFrame
+	btn.Visible = menuOpen
+	btn.MouseButton1Click:Connect(callback)
+	table.insert(buttons, btn)
+	return btn
+end
+
+-- Arrange buttons in grid
+local function updateGrid()
+	local cols = math.floor(600 / (buttonSize.X + buttonSpacing))
+	if cols < 1 then cols = 1 end
+	for i, btn in ipairs(buttons) do
+		local row = math.floor((i - 1) / cols)
+		local col = (i - 1) % cols
+		btn.Position = UDim2.new(0, menuPadding + col * (buttonSize.X + buttonSpacing), 0, menuPadding + (row + 1) * (buttonSize.Y + buttonSpacing))
+	end
+	local rows = math.ceil(#buttons / cols)
+	menuFrame.Size = UDim2.new(0, cols * (buttonSize.X + buttonSpacing) + menuPadding, 0, (rows + 1) * (buttonSize.Y + buttonSpacing) + menuPadding)
+end
+
+--======================================================
+-- [Settings]
+--======================================================
+local offset = Vector3.new(0, 0, -5)
+local maxDistance = 80
+local speedEnabled = false
+local noclipEnabled = false
+local autoClickEnabled = false
+
+--======================================================
+-- [Utility: NPC Check]
+--======================================================
+local function isNPC(model)
+	if not model:IsA("Model") then return false end
+	if Players:GetPlayerFromCharacter(model) then return false end
+	return model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart")
+end
+
+--======================================================
+-- [Teleport Nearby NPCs]
+--======================================================
+local function teleportNearbyNPCs()
+	local char = player.Character
+	if not char then return end
+	local myHRP = char:FindFirstChild("HumanoidRootPart")
+	if not myHRP then return end
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Part") and obj.Name == "HumanoidRootPart" then
+			local npc = obj.Parent
+			if isNPC(npc) and (obj.Position - myHRP.Position).Magnitude <= maxDistance then
+				obj.CFrame = myHRP.CFrame * CFrame.new(offset)
+			end
+		end
+	end
+end
+
+--======================================================
+-- [Heal System - ต้องนั่งเก้าอี้]
+--======================================================
+local function findNearestSeat()
+	local char = player.Character
+	if not char then return nil end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	local nearest, shortestDist = nil, math.huge
+	for _, seat in ipairs(workspace:GetDescendants()) do
+		if seat:IsA("Seat") and not seat.Disabled then
+			local dist = (seat.Position - hrp.Position).Magnitude
+			if dist < shortestDist then
+				shortestDist = dist
+				nearest = seat
+			end
+		end
+	end
+	return nearest
+end
+
+local function healPlayer()
+	-- ปิดฟังชั่นอื่นทั้งหมดชั่วคราว
+	speedEnabled = false
+	noclipEnabled = false
+	autoClickEnabled = false
+
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local humanoid = char:FindFirstChild("Humanoid")
+	if not hrp or not humanoid then return end
+	local seat = findNearestSeat()
+	if not seat then return end
+
+	local originalCFrame = hrp.CFrame
+	local wasAnchored = seat.Anchored
+	seat.Anchored = true
+	hrp.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
+
+	-- รอ HP เต็ม
+	while true do
+		task.wait(1)
+		local hpLabel = player:FindFirstChild("PlayerGui")
+			and player.PlayerGui:FindFirstChild("Main")
+			and player.PlayerGui.Main:FindFirstChild("HomePage")
+			and player.PlayerGui.Main.HomePage:FindFirstChild("Bottom")
+			and player.PlayerGui.Main.HomePage.Bottom:FindFirstChild("Main")
+			and player.PlayerGui.Main.HomePage.Bottom.Main:FindFirstChild("Health")
+			and player.PlayerGui.Main.HomePage.Bottom.Main.Health:FindFirstChild("Num")
+			and player.PlayerGui.Main.HomePage.Bottom.Main.Health.Num:FindFirstChild("Health")
+		if hpLabel and hpLabel:IsA("TextLabel") then
+			local text = hpLabel.Text
+			local current, max = string.match(text, "(%d+)%s*/%s*(%d+)")
+			if current and max and tonumber(current) == tonumber(max) then
+				break
+			end
+		else
+			break
+		end
+	end
+
+	humanoid.Sit = false
+	task.wait(0.1)
+	hrp.CFrame = originalCFrame
+	seat.Anchored = wasAnchored
+end
+
+--======================================================
+-- [Infinite Jump]
+--======================================================
+UserInputService.JumpRequest:Connect(function()
+	if humanoid then
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+end)
+
+--======================================================
+-- [Speed]
+--======================================================
+RunService.Stepped:Connect(function()
+	if speedEnabled and humanoid then
+		humanoid.WalkSpeed = 60
+	end
+end)
+local function toggleSpeed()
+	speedEnabled = not speedEnabled
+end
+
+--======================================================
+-- [NoClip]
+--======================================================
+RunService.Stepped:Connect(function()
+	if noclipEnabled and character then
+		for _, part in ipairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
+local function toggleNoClip()
+	noclipEnabled = not noclipEnabled
+end
+
+--======================================================
+-- [Auto Click]
+--======================================================
+local function autoClick()
+	while autoClickEnabled do
+		mouse1press()
+		task.wait(0.1)
+		mouse1release()
+		task.wait(0.1)
+	end
+end
+local function toggleAutoClick()
+	autoClickEnabled = not autoClickEnabled
+	if autoClickEnabled then
+		task.spawn(autoClick)
+	end
+end
+
+--======================================================
+-- [ESP + Hover]
+--======================================================
+local lastPositions = {}
+local scanInterval = 2
+local monsters = {}
+local espEnabled = true
+
+local function getHRP()
+	if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+		return LocalPlayer.Character.HumanoidRootPart
+	end
+	return nil
+end
+
+local function createESP(monster)
+	if monster:FindFirstChild("HumanoidRootPart") and not monster:FindFirstChild("MonsterESP") then
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "MonsterESP"
+		billboard.Adornee = monster.HumanoidRootPart
+		billboard.Size = UDim2.new(0, 200, 0, 50)
+		billboard.StudsOffset = Vector3.new(0, 3, 0)
+		billboard.AlwaysOnTop = true
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = "[Monster] " .. monster.Name
+		label.TextColor3 = Color3.fromRGB(255, 255, 0)
+		label.TextStrokeTransparency = 0
+		label.Font = Enum.Font.SourceSansBold
+		label.TextScaled = true
+		label.Name = "ESPLabel"
+		label.Parent = billboard
+
+		billboard.Parent = monster
+	end
+end
+
+local function scanMonsters()
+	monsters = {}
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Humanoid") and obj.Parent:IsA("Model") then
+			local model = obj.Parent
+			if model ~= LocalPlayer.Character and model:FindFirstChild("HumanoidRootPart") then
+				table.insert(monsters, model)
+				if espEnabled then
+					createESP(model)
+				end
+			end
+		end
+	end
+end
+
+scanMonsters()
+task.spawn(function()
+	while true do
+		task.wait(scanInterval)
+		scanMonsters()
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if not espEnabled then return end
+	for _, mob in ipairs(monsters) do
+		if mob and mob:FindFirstChild("HumanoidRootPart") then
+			local hrp = mob.HumanoidRootPart
+			local lastPos = lastPositions[mob] or hrp.Position
+			local currentPos = hrp.Position
+			local moving = (currentPos - lastPos).Magnitude > 0.1
+
+			local espGui = mob:FindFirstChild("MonsterESP")
+			if espGui and espGui:FindFirstChild("ESPLabel") then
+				if moving then
+					espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+				else
+					espGui.ESPLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+				end
+			end
+
+			lastPositions[mob] = currentPos
+		end
+	end
+end)
+
+local function getNearestMonster()
+	local nearest, nearestDist = nil, math.huge
+	local hrp = getHRP()
+	if not hrp then return nil end
+	for _, mob in ipairs(monsters) do
+		if mob and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") then
+			if mob:FindFirstChild("MonsterESP") and mob.Humanoid.Health > 0 then
+				local dist = (mob.HumanoidRootPart.Position - hrp.Position).Magnitude
+				if dist < nearestDist then
+					nearestDist = dist
+					nearest = mob
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+local hoverConn = nil
+local bodyPos = nil
+local isHovering = false
+
+local function autoHoverNearestMonster()
+	local hrp = getHRP()
+	if not hrp then return end
+	if bodyPos then bodyPos:Destroy() end
+	if hoverConn then hoverConn:Disconnect() end
+	bodyPos = Instance.new("BodyPosition")
+	bodyPos.MaxForce = Vector3.new(1e5,1e5,1e5)
+	bodyPos.P = 1e4
+	bodyPos.D = 100
+	bodyPos.Parent = hrp
+	isHovering = true
+	hoverConn = RunService.RenderStepped:Connect(function()
+		if not isHovering then return end
+		local target = getNearestMonster()
+		if target then
+			bodyPos.Position = target.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
+		else
+			bodyPos.Position = hrp.Position
+		end
+	end)
+end
+
+local function stopHover()
+	isHovering = false
+	if hoverConn then hoverConn:Disconnect() hoverConn = nil end
+	if bodyPos then bodyPos:Destroy() bodyPos = nil end
+end
+
+--======================================================
+-- [Add Buttons to Menu]
+--======================================================
+addButton("Bring Enemies (R)", Color3.fromRGB(0, 180, 90), teleportNearbyNPCs)
+addButton("Heal (F)", Color3.fromRGB(200, 100, 100), healPlayer)
+addButton("Speed (G)", Color3.fromRGB(255, 200, 50), toggleSpeed)
+addButton("NoClip", Color3.fromRGB(120, 50, 200), toggleNoClip)
+addButton("ESP: ON/OFF", Color3.fromRGB(0, 170, 0), function()
+	espEnabled = not espEnabled
+end)
+addButton("Auto Hover", Color3.fromRGB(0, 0, 170), autoHoverNearestMonster)
+addButton("Stop Hover", Color3.fromRGB(170, 0, 0), stopHover)
+addButton("Auto Click", Color3.fromRGB(50, 200, 50), toggleAutoClick)
+
+-- Arrange menu grid
+updateGrid()
+
+--======================================================
+-- [Hotkeys]
+--======================================================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.R then teleportNearbyNPCs()
+	elseif input.KeyCode == Enum.KeyCode.F then healPlayer()
+	elseif input.KeyCode == Enum.KeyCode.G then toggleSpeed()
+	end
+end)
+--======================================================
 -- All-In-One GUI + Menu + Heal + ESP + Hover + NoClip
 --======================================================
 
